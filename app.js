@@ -977,8 +977,7 @@ async function download16x9Image() {
     // Let browser paint immediate button & toast feedback before layout switch
     await new Promise(resolve => requestAnimationFrame(resolve));
 
-    const isCompactViewport = window.innerWidth <= 768;
-    const exportScale = isCompactViewport ? 1 : 1.5;
+    const exportScale = 1.5;
 
     document.body.classList.remove('mobile-edit-flow');
     sheet.classList.remove('mobile-card-flow');
