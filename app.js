@@ -939,12 +939,14 @@ async function download16x9Image() {
   isSavingImage = true;
 
   const saveBtn = document.querySelector('.topbar-right .btn-primary-cta');
-  const prevBtnText = saveBtn ? saveBtn.textContent : '';
+  const prevBtnText = saveBtn ? (saveBtn.dataset.origLabel || saveBtn.textContent) : '';
   if (saveBtn) {
+    saveBtn.dataset.origLabel = prevBtnText;
+    if (saveBtn._doneTimer) clearTimeout(saveBtn._doneTimer);
     saveBtn.disabled = true;
-    saveBtn.textContent = '저장 중...';
+    saveBtn.textContent = '이미지 생성 중...';
   }
-  showToast('16:9 PNG 이미지를 저장 중입니다...');
+  showToast('16:9 PNG 이미지를 준비 중입니다...');
 
   const scaler = document.getElementById('stageScaler');
   const sheet = document.getElementById('sheet16x9');
@@ -1092,24 +1094,41 @@ async function download16x9Image() {
     const titleSlug = (document.getElementById('metaTitle').value || '포챔스_파티').replace(/[\\/:*?"<>|]/g, '_');
     const link = document.createElement('a');
     link.download = `${titleSlug}_16x9.png`;
+    link.style.display = 'none';
+    let downloadStarted = false;
     if (blob) {
       const blobUrl = URL.createObjectURL(blob);
       link.href = blobUrl;
+      document.body.appendChild(link);
       link.click();
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      link.remove();
+      downloadStarted = true;
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } else if (fallbackCanvas) {
       link.href = fallbackCanvas.toDataURL('image/png');
+      document.body.appendChild(link);
       link.click();
+      link.remove();
+      downloadStarted = true;
     }
-    showToast('16:9 PNG 이미지가 저장되었습니다.');
+    showToast('이미지 생성 완료 · 브라우저에서 다운로드를 시작합니다. 완료 전 창을 닫지 마세요.', 4500);
+    if (saveBtn && downloadStarted) {
+      saveBtn.textContent = '다운로드 시작됨 ✓';
+      saveBtn._doneTimer = setTimeout(() => {
+        saveBtn.textContent = prevBtnText;
+      }, 1600);
+    }
   } catch (err) {
-    showToast('이미지 캡처 중 오류가 발생했습니다. 전체화면(F) 캡처를 이용해주세요.');
+    showToast('이미지 캡처 중 오류가 발생했습니다. 전체화면(F) 캡처를 이용해주세요.', 3500);
+    if (saveBtn) saveBtn.textContent = prevBtnText;
   } finally {
     restoreLayout();
     isSavingImage = false;
     if (saveBtn) {
       saveBtn.disabled = false;
-      saveBtn.textContent = prevBtnText;
+      if (saveBtn.textContent === '이미지 생성 중...') {
+        saveBtn.textContent = prevBtnText;
+      }
     }
   }
 }
@@ -1423,12 +1442,12 @@ function loadInitialState() {
   renderOcrStatusUi();
 }
 
-function showToast(msg) {
+function showToast(msg, durationMs = 2800) {
   const el = document.getElementById('toastBox');
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+  toastTimer = setTimeout(() => el.classList.remove('show'), durationMs);
 }
 
 window.addEventListener('resize', fitStageToViewport);
