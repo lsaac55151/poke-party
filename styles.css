@@ -188,6 +188,53 @@ input, textarea, select, button {
   color: var(--ui-accent-fg);
 }
 
+/* ---- UI Language Switcher (언어 / KO · JP · EN) ---- */
+.ui-lang-switch {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 2px 3px 2px 8px;
+  gap: 3px;
+  border-radius: 7px;
+  background: var(--ui-surface-2);
+  border: 1px solid var(--ui-border);
+  flex-shrink: 0;
+}
+
+.ui-lang-prefix {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ui-text-sub);
+  margin-right: 3px;
+  white-space: nowrap;
+}
+
+.ui-lang-btn {
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ui-text-sub);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.ui-lang-btn:hover {
+  color: var(--ui-text);
+  background: var(--ui-surface-hover);
+}
+
+.ui-lang-btn.active {
+  background: var(--ui-accent);
+  color: var(--ui-accent-fg);
+  font-weight: 800;
+}
+
 /* 10% Single Primary Accent Button per 60-30-10 Guide */
 .btn-primary-cta {
   background: var(--ui-accent);
@@ -1159,7 +1206,7 @@ body.presentation-mode .exit-fs-btn {
 
 .sp-row {
   display: grid;
-  grid-template-columns: 64px 1fr 52px 52px 50px;
+  grid-template-columns: 72px 1fr 52px 52px 50px;
   align-items: center;
   gap: 8px;
   font-size: 12.5px;
@@ -1280,6 +1327,59 @@ body.presentation-mode .toast {
   padding: 1px 5px;
   border-radius: 4px;
   font-weight: 700;
+}
+
+.ocr-drop-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ocr-lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 2px 3px 2px 8px;
+  border-radius: 7px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+}
+
+.ocr-lang-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ui-text-sub);
+  margin-right: 3px;
+  white-space: nowrap;
+}
+
+.ocr-lang-btn {
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ui-text-sub);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.ocr-lang-btn:hover {
+  color: var(--ui-text);
+  background: var(--ui-surface-hover);
+}
+
+.ocr-lang-btn.active {
+  background: var(--ui-accent);
+  color: var(--ui-accent-fg);
+  font-weight: 800;
 }
 
 .ocr-progress-wrap {
@@ -1584,6 +1684,7 @@ body.presentation-mode .toast {
   .mobile-subbar-toggle {
     display: inline-flex;
     margin-left: auto;
+    order: 1;
   }
 
   .topbar {
@@ -1598,14 +1699,29 @@ body.presentation-mode .toast {
 
   .app-brand {
     margin-right: 0;
+    order: 0;
   }
 
   .app-title {
     font-size: 12.5px;
   }
 
+  .ui-lang-switch {
+    order: 2;
+    flex: 1 1 100%;
+    width: 100%;
+    height: 30px;
+    padding: 2px 4px 2px 9px;
+  }
+
+  .ui-lang-btn {
+    flex: 1;
+    text-align: center;
+  }
+
   .topbar-left .sep {
     display: block;
+    order: 3;
     flex-basis: 100%;
     width: 100%;
     height: 0;
@@ -1615,6 +1731,7 @@ body.presentation-mode .toast {
 
   .topbar-left .btn:not(.mobile-subbar-toggle),
   .topbar-right .btn {
+    order: 4;
     flex: 1 1 calc(50% - 3px);
     justify-content: center;
     height: 34px;
@@ -1835,7 +1952,7 @@ body.presentation-mode .toast {
   }
 
   .sheet-16x9.mobile-card-flow .card-split {
-    grid-template-columns: 48% 52%;
+    grid-template-columns: 48.5% 51.5%;
     flex: none;
     height: auto;
   }
@@ -1848,7 +1965,7 @@ body.presentation-mode .toast {
   }
 
   .sheet-16x9.mobile-card-flow .card-left-col {
-    padding: 20px 6px 7px 6px;
+    padding: 20px 5px 7px 5px;
   }
 
   .sheet-16x9.mobile-card-flow .left-info-stack {
@@ -1856,70 +1973,78 @@ body.presentation-mode .toast {
   }
 
   .sheet-16x9.mobile-card-flow .info-block {
-    padding: 4.5px 5px;
+    padding: 4px 4px;
     border-radius: 6px;
     border-width: 1px;
-    gap: 3px;
+    gap: 2.5px;
   }
 
   .sheet-16x9.mobile-card-flow .ib-tag {
-    font-size: 9.5px;
-    padding: 2px 4px;
+    font-size: 8.5px;
+    padding: 1.5px 3px;
     border-radius: 4px;
   }
 
   .sheet-16x9.mobile-card-flow .ib-val,
   .sheet-16x9.mobile-card-flow .party-grid.grid-2x3 .ib-val {
-    font-size: 11.5px;
-    gap: 2.5px;
+    font-size: 10px;
+    gap: 2px;
+  }
+
+  .sheet-16x9.mobile-card-flow .ib-val-txt {
+    flex-shrink: 1;
+    min-width: 0;
+    padding-right: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .sheet-16x9.mobile-card-flow .item-icon {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
     margin-right: 1px;
   }
 
   .sheet-16x9.mobile-card-flow .nat-mod-inline {
-    font-size: 9px;
-    padding: 1px 3.5px;
+    font-size: 8px;
+    padding: 1px 2.5px;
     border-radius: 4px;
   }
 
   .sheet-16x9.mobile-card-flow .card-moves-col {
-    padding: 3px 7px;
+    padding: 3px 5px;
   }
 
   .sheet-16x9.mobile-card-flow .move-row {
     padding: 3.5px 0;
-    gap: 4px;
+    gap: 3px;
     border-bottom-width: 1px;
   }
 
   .sheet-16x9.mobile-card-flow .mv-left {
-    gap: 5px;
+    gap: 3px;
   }
 
   .sheet-16x9.mobile-card-flow .mv-type-sq,
   .sheet-16x9.mobile-card-flow .party-grid.grid-2x3 .mv-type-sq {
-    min-width: 34px;
-    height: 20px;
-    padding: 0 5px;
-    border-radius: 5px;
-    font-size: 10.5px;
+    min-width: 28px;
+    height: 19px;
+    padding: 0 3.5px;
+    border-radius: 4px;
+    font-size: 9px;
     border-width: 1px;
   }
 
   .sheet-16x9.mobile-card-flow .mv-name,
   .sheet-16x9.mobile-card-flow .party-grid.grid-2x3 .mv-name {
-    font-size: 13px;
+    font-size: 11px;
     line-height: 1.22;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 
   .sheet-16x9.mobile-card-flow .mv-cat {
-    font-size: 10px;
-    padding: 1.5px 5px;
+    font-size: 9px;
+    padding: 1.5px 3.5px;
     border-radius: 4px;
   }
 
@@ -2032,7 +2157,27 @@ body.presentation-mode .toast {
     padding: 12px;
   }
 
+  .ocr-drop-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .ocr-lang-switch {
+    flex: 1 1 auto;
+    justify-content: space-between;
+  }
+
+  .ocr-lang-btn {
+    flex: 1;
+    text-align: center;
+  }
+
   .ocr-drop-banner label.btn {
+    flex: 1 1 140px;
     justify-content: center;
     height: 36px;
   }

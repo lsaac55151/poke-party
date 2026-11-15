@@ -3,8 +3,26 @@ import * as ort from './ort/ort.wasm.bundle.min.mjs';
 const EXTRA_ASCII = new Set(
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -.'+:".split(''),
 );
+const JA_EXTRA_CHARS = new Set(['ー', '・', '♀', '♂', '〜', '～', '%', '(', ')']);
 
-function buildCtcVocab(dictTxt) {
+function normalizeOcrLang(lang) {
+  return String(lang || '').toLowerCase() === 'ja' ? 'ja' : 'ko';
+}
+
+function isAllowedTextChar(ch, mode) {
+  if (ch >= '0' && ch <= '9') return true;
+  if (EXTRA_ASCII.has(ch)) return true;
+  if (mode === 'ja') {
+    return (
+      (ch >= '\u3040' && ch <= '\u309f') ||
+      (ch >= '\u30a0' && ch <= '\u30ff') ||
+      JA_EXTRA_CHARS.has(ch)
+    );
+  }
+  return ch >= '\uac00' && ch <= '\ud7a3';
+}
+
+function buildCtcVocab(dictTxt, mode = 'ko') {
   const lines = dictTxt.split(/\r?\n/);
   if (lines.length && lines[lines.length - 1] === '') lines.pop();
   const chars = ['blank', ...lines, ' '];
@@ -18,7 +36,7 @@ function buildCtcVocab(dictTxt) {
     if (ch >= '0' && ch <= '9') {
       digitIndices.push(i);
       textIndices.push(i);
-    } else if ((ch >= '\uac00' && ch <= '\ud7a3') || EXTRA_ASCII.has(ch)) {
+    } else if (isAllowedTextChar(ch, mode)) {
       textIndices.push(i);
     }
   }
@@ -55,26 +73,35 @@ function decodeCtc(logits, seqLen, numClasses, vocab, digitsOnly) {
   return out.join('').trim();
 }
 
-let session = null;
-let vocab = null;
+const MODEL_SPECS = {
+  ko: { modelPath: 'models/rec.onnx', dictPath: 'models/dict.txt' },
+  ja: { modelPath: 'models/rec-ja.onnx', dictPath: 'models/dict-ja.txt' },
+};
+const sessions = new Map();
+let ortConfigured = false;
 
 self.onmessage = async (event) => {
   const msg = event.data;
 
   try {
     if (msg.type === 'init') {
-      if (session) {
-        self.postMessage({ type: 'ready' });
+      const ocrLang = normalizeOcrLang(msg.ocrLang);
+      if (sessions.has(ocrLang)) {
+        self.postMessage({ type: 'ready', ocrLang });
         return;
       }
 
-      ort.env.wasm.numThreads = 1;
-      ort.env.wasm.wasmPaths = new URL('ort/', msg.baseUrl).href;
+      if (!ortConfigured) {
+        ort.env.wasm.numThreads = 1;
+        ort.env.wasm.wasmPaths = new URL('ort/', msg.baseUrl).href;
+        ortConfigured = true;
+      }
 
-      const modelUrl = new URL('models/rec.onnx', msg.baseUrl).href;
-      const dictUrl = new URL('models/dict.txt', msg.baseUrl).href;
+      const spec = MODEL_SPECS[ocrLang];
+      const modelUrl = new URL(spec.modelPath, msg.baseUrl).href;
+      const dictUrl = new URL(spec.dictPath, msg.baseUrl).href;
 
-      self.postMessage({ type: 'progress', stage: 'OCR 인식 데이터 불러오는 중...', ratio: 0.15 });
+      self.postMessage({ type: 'progress', stageKey: 'loading_ocr_data', stage: 'OCR 인식 데이터 불러오는 중...', ratio: 0.15, ocrLang });
 
       const [modelRes, dictRes] = await Promise.all([fetch(modelUrl), fetch(dictUrl)]);
       if (!modelRes.ok) throw new Error(`모델 로드 실패: ${modelRes.status}`);
@@ -82,20 +109,24 @@ self.onmessage = async (event) => {
 
       const [modelBuf, dictTxt] = await Promise.all([modelRes.arrayBuffer(), dictRes.text()]);
 
-      self.postMessage({ type: 'progress', stage: '브라우저 OCR 엔진 준비 중...', ratio: 0.75 });
+      self.postMessage({ type: 'progress', stageKey: 'preparing_engine', stage: '브라우저 OCR 엔진 준비 중...', ratio: 0.75, ocrLang });
 
-      vocab = buildCtcVocab(dictTxt);
-      session = await ort.InferenceSession.create(new Uint8Array(modelBuf), {
+      const vocab = buildCtcVocab(dictTxt, ocrLang);
+      const session = await ort.InferenceSession.create(new Uint8Array(modelBuf), {
         executionProviders: ['wasm'],
       });
 
-      self.postMessage({ type: 'ready' });
+      sessions.set(ocrLang, { session, vocab });
+      self.postMessage({ type: 'ready', ocrLang });
       return;
     }
 
     if (msg.type === 'recognize') {
-      if (!session || !vocab) throw new Error('OCR 모델이 초기화되지 않았습니다.');
+      const ocrLang = normalizeOcrLang(msg.ocrLang);
+      const entry = sessions.get(ocrLang);
+      if (!entry) throw new Error('OCR 모델이 초기화되지 않았습니다.');
 
+      const { session, vocab } = entry;
       const results = {};
       const inputName = session.inputNames[0];
       const outputName = session.outputNames[0];
@@ -126,6 +157,7 @@ self.onmessage = async (event) => {
     self.postMessage({
       type: 'error',
       requestId: msg && 'requestId' in msg ? msg.requestId : undefined,
+      ocrLang: msg && msg.ocrLang ? normalizeOcrLang(msg.ocrLang) : undefined,
       message: err instanceof Error ? err.message : String(err),
     });
   }

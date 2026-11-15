@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>포켓몬 챔피언스 파티 시트</title>
+  <title data-i18n="docTitle">POKÉMON CHAMPIONS PARTY — 16:9 파티 시트 제작기</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800;900&family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20261115h" />
+  <link rel="stylesheet" href="./styles.css?v=20261115n" />
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="./pokemon-data.js?v=20261115h"></script>
+  <script src="./pokemon-data.js?v=20261115n"></script>
+  <script src="./i18n.js?v=20261115n"></script>
 </head>
 <body class="theme-ingame">
 
@@ -20,18 +21,24 @@
         <span class="brand-dot"></span>
         <span class="app-title">POKÉMON CHAMPIONS PARTY</span>
       </div>
+      <div class="ui-lang-switch" id="uiLangSwitch" role="group" data-i18n-aria="uiLangAria" aria-label="UI 언어 선택 (KO / JP / EN)">
+        <span class="ui-lang-prefix" id="uiLangPrefix" data-i18n="uiLangPrefix">언어</span>
+        <button type="button" class="ui-lang-btn active" data-ui-lang="ko" onclick="setUiLanguage('ko')" title="한국어 (Korean)">KO</button>
+        <button type="button" class="ui-lang-btn" data-ui-lang="ja" onclick="setUiLanguage('ja')" title="日本語 (Japanese)">JP</button>
+        <button type="button" class="ui-lang-btn" data-ui-lang="en" onclick="setUiLanguage('en')" title="English">EN</button>
+      </div>
       <button type="button" class="btn mobile-subbar-toggle" id="mobileSubbarToggle" onclick="toggleMobileSubbar()">시트 설정 ▾</button>
       <div class="sep"></div>
-      <button type="button" class="btn" onclick="openOcrModal()">스샷 입력 (Ctrl+V)</button>
-      <button type="button" class="ocr-pill" id="ocrStatusPill" onclick="openOcrModal()" hidden title="저장된 능력·스테이터스 스샷 정보 및 변환 내역 보기"></button>
-      <button type="button" class="btn" onclick="openPasteModal()">쇼다운 입력 / 파일 열기</button>
-      <button type="button" class="btn" onclick="openSlotEditor(0)">개별 포켓몬 편집</button>
-      <button type="button" class="btn" onclick="copyShowdownExport()">쇼다운 복사</button>
+      <button type="button" class="btn" id="btnOpenOcr" data-i18n="btnOcr" onclick="openOcrModal()">스샷 입력 (Ctrl+V)</button>
+      <button type="button" class="ocr-pill" id="ocrStatusPill" onclick="openOcrModal()" hidden data-i18n-title="ocrPillTitle" title="저장된 능력·스테이터스 스샷 정보 및 변환 내역 보기"></button>
+      <button type="button" class="btn" id="btnOpenPaste" data-i18n="btnPaste" onclick="openPasteModal()">쇼다운 입력 / 파일 열기</button>
+      <button type="button" class="btn" id="btnOpenEditor" data-i18n="btnEdit" onclick="openSlotEditor(0)">개별 포켓몬 편집</button>
+      <button type="button" class="btn" id="btnCopyShowdown" data-i18n="btnCopy" onclick="copyShowdownExport()">쇼다운 복사</button>
     </div>
 
     <div class="topbar-right">
-      <button type="button" class="btn" onclick="togglePresentationMode()">전체화면 (F)</button>
-      <button type="button" class="btn btn-primary-cta" onclick="download16x9Image()">16:9 이미지 저장 (PNG)</button>
+      <button type="button" class="btn" id="btnToggleFs" data-i18n="btnFullscreen" onclick="togglePresentationMode()">전체화면 (F)</button>
+      <button type="button" class="btn btn-primary-cta" id="btnSavePng" data-i18n="btnSavePng" onclick="download16x9Image()">16:9 이미지 저장 (PNG)</button>
     </div>
   </header>
 
@@ -40,47 +47,47 @@
     <div class="subbar-fields">
       <label class="field-inline" style="cursor:pointer;">
         <input type="checkbox" id="showBannerCheck" checked onchange="renderSheet()" />
-        <span>상단 배너</span>
+        <span data-i18n="lblBanner">상단 배너</span>
       </label>
       <label class="field-inline">
-        <span>파티명</span>
-        <input type="text" id="metaTitle" class="ctrl-input" style="width:195px;" value="" placeholder="파티명 입력" oninput="renderSheet()" />
+        <span data-i18n="lblTitle">파티명</span>
+        <input type="text" id="metaTitle" class="ctrl-input" style="width:195px;" value="" data-i18n-placeholder="phTitle" placeholder="파티명 입력" oninput="renderSheet()" />
       </label>
       <label class="field-inline">
-        <span>설명</span>
-        <input type="text" id="metaSubtitle" class="ctrl-input" style="width:155px;" value="" placeholder="설명 입력" oninput="renderSheet()" />
+        <span data-i18n="lblSubtitle">설명</span>
+        <input type="text" id="metaSubtitle" class="ctrl-input" style="width:155px;" value="" data-i18n-placeholder="phSubtitle" placeholder="설명 입력" oninput="renderSheet()" />
       </label>
     </div>
 
     <div class="subbar-right">
-      <select id="themeSelect" class="ctrl-select" onchange="renderSheet()" aria-label="컬러 테마">
-        <option value="ingame" selected>포챔스 인게임 (퍼플·크림골드)</option>
-        <option value="logo">포챔스 로고 (네이비·골드)</option>
-        <option value="dark">뉴트럴 다크</option>
+      <select id="themeSelect" class="ctrl-select" onchange="renderSheet()" data-i18n-aria="ariaTheme" aria-label="컬러 테마">
+        <option value="ingame" selected data-i18n="themeIngame">포챔스 인게임 (퍼플·크림골드)</option>
+        <option value="logo" data-i18n="themeLogo">포챔스 로고 (네이비·골드)</option>
+        <option value="dark" data-i18n="themeDark">뉴트럴 다크</option>
       </select>
-      <select id="gridSelect" class="ctrl-select" onchange="renderSheet()" aria-label="배열 구조">
-        <option value="3x2" selected>3열 × 2행</option>
-        <option value="2x3">2열 × 3행 (인게임 배열)</option>
+      <select id="gridSelect" class="ctrl-select" onchange="renderSheet()" data-i18n-aria="ariaGrid" aria-label="배열 구조">
+        <option value="3x2" selected data-i18n="grid3x2">3열 × 2행</option>
+        <option value="2x3" data-i18n="grid2x3">2열 × 3행 (인게임 배열)</option>
       </select>
-      <select id="viewModeSelect" class="ctrl-select" onchange="renderSheet()" aria-label="표시 정보">
-        <option value="full" selected>능력 + 실능/SP 모두 표시</option>
-        <option value="ingame">능력만 표시 (인게임형)</option>
+      <select id="viewModeSelect" class="ctrl-select" onchange="renderSheet()" data-i18n-aria="ariaViewMode" aria-label="표시 정보">
+        <option value="full" selected data-i18n="viewFull">능력 + 실능/SP 모두 표시</option>
+        <option value="ingame" data-i18n="viewIngame">능력만 표시 (인게임형)</option>
       </select>
-      <select id="langSelect" class="ctrl-select" onchange="renderSheet()" aria-label="표시 언어">
-        <option value="ko" selected>한국어</option>
-        <option value="ja">日本語 (일본어)</option>
-        <option value="en">English (영어)</option>
-        <option value="ko-ja">한·일 병기</option>
-        <option value="both">한·영 병기</option>
+      <select id="langSelect" class="ctrl-select" onchange="renderSheet()" data-i18n-aria="ariaCardLang" aria-label="시트 표기 언어">
+        <option value="ko" selected data-i18n="cardLangKo">한국어 (KO)</option>
+        <option value="ja" data-i18n="cardLangJa">日本語 (JP)</option>
+        <option value="en" data-i18n="cardLangEn">English (EN)</option>
+        <option value="ko-ja" data-i18n="cardLangKoJa">한·일 병기 (KO+JP)</option>
+        <option value="both" data-i18n="cardLangKoEn">한·영 병기 (KO+EN)</option>
       </select>
-      <select id="megaModeSelect" class="ctrl-select" onchange="updateGlobalSettings()" aria-label="메가진화 표시">
-        <option value="auto" selected>메가진화 폼 표시</option>
-        <option value="base">기본 폼 표시</option>
+      <select id="megaModeSelect" class="ctrl-select" onchange="updateGlobalSettings()" data-i18n-aria="ariaMegaMode" aria-label="메가진화 표시">
+        <option value="auto" selected data-i18n="megaAuto">메가진화 폼 표시</option>
+        <option value="base" data-i18n="megaBase">기본 폼 표시</option>
       </select>
     </div>
   </div>
 
-  <button type="button" class="btn exit-fs-btn" onclick="togglePresentationMode()">편집 화면 복귀 (ESC)</button>
+  <button type="button" class="btn exit-fs-btn" data-i18n="btnExitFs" onclick="togglePresentationMode()">편집 화면 복귀 (ESC)</button>
 
   <!-- 16:9 Studio Workspace -->
   <main class="workspace">
@@ -105,12 +112,12 @@
     </div>
   </main>
 
-  <footer class="site-footer" aria-label="면책 조항 및 출처">
-    <span class="footer-disclaimer">
+  <footer class="site-footer" data-i18n-aria="footerAria" aria-label="면책 조항 및 출처">
+    <span class="footer-disclaimer" data-i18n="footerDisclaimer">
       비공식 · 비상업 팬 제작 도구이며 Nintendo · Creatures Inc. · GAME FREAK inc. · The Pokémon Company와 무관합니다. 포켓몬 관련 상표 및 저작권은 각 권리자에게 귀속됩니다.
     </span>
     <span class="footer-credits">
-      데이터·오픈소스:
+      <span data-i18n="footerCreditsPrefix">데이터·오픈소스:</span>
       <a href="https://pokemonshowdown.com/" target="_blank" rel="noopener noreferrer">Pokémon Showdown</a> ·
       <a href="https://pokeapi.co/" target="_blank" rel="noopener noreferrer">PokeAPI</a> ·
       <a href="https://html2canvas.hertzen.com/" target="_blank" rel="noopener noreferrer">html2canvas (MIT)</a> ·
@@ -124,27 +131,27 @@
   <div class="modal-backdrop" id="pasteModal">
     <div class="modal-card">
       <div class="modal-head">
-        <span style="font-size:15px;font-weight:700;">포켓몬 쇼다운 파티 텍스트 입력</span>
-        <button type="button" class="btn" onclick="closePasteModal()">닫기</button>
+        <span style="font-size:15px;font-weight:700;" data-i18n="pasteTitle">포켓몬 쇼다운 파티 텍스트 입력</span>
+        <button type="button" class="btn" data-i18n="btnClose" onclick="closePasteModal()">닫기</button>
       </div>
       <div class="modal-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-          <span class="modal-subhint">쇼다운 텍스트를 붙여넣거나 .txt / 게임 스샷(Ctrl+V)을 불러오세요.</span>
+          <span class="modal-subhint" data-i18n="pasteHint">쇼다운 텍스트를 붙여넣거나 .txt / 게임 스샷(Ctrl+V)을 불러오세요.</span>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button type="button" class="btn" onclick="closePasteModal(); openOcrModal();">스샷 이미지 입력</button>
+            <button type="button" class="btn" data-i18n="btnPasteOcr" onclick="closePasteModal(); openOcrModal();">스샷 이미지 입력</button>
             <label class="btn" style="cursor:pointer;">
-              <span>로컬 .txt 파일 열기</span>
+              <span data-i18n="btnOpenTxt">로컬 .txt 파일 열기</span>
               <input type="file" accept=".txt" style="display:none;" onchange="handleTxtFileUpload(event)" />
             </label>
           </div>
         </div>
-        <textarea id="pasteInput" class="paste-area" placeholder="포켓몬 쇼다운 파티 텍스트를 붙여넣으세요 (포챔스 SP 0~32 / 합계 66 및 기존 252 노력치 자동 환산 지원)"></textarea>
+        <textarea id="pasteInput" class="paste-area" data-i18n-placeholder="pastePlaceholder" placeholder="포켓몬 쇼다운 파티 텍스트를 붙여넣으세요 (포챔스 SP 0~32 / 합계 66 및 기존 252 노력치 자동 환산 지원)"></textarea>
       </div>
       <div class="modal-foot">
-        <span class="modal-subhint">영문·국문·일문 쇼다운 텍스트를 모두 인식합니다.</span>
+        <span class="modal-subhint" data-i18n="pasteFootHint">영문·국문·일문 쇼다운 텍스트를 모두 인식합니다.</span>
         <div style="display:flex;gap:8px;">
-          <button type="button" class="btn" onclick="closePasteModal()">취소</button>
-          <button type="button" class="btn btn-primary-cta" onclick="applyPasteInput()">16:9 시트에 적용</button>
+          <button type="button" class="btn" data-i18n="btnCancel" onclick="closePasteModal()">취소</button>
+          <button type="button" class="btn btn-primary-cta" data-i18n="btnApplySheet" onclick="applyPasteInput()">16:9 시트에 적용</button>
         </div>
       </div>
     </div>
@@ -154,57 +161,57 @@
   <div class="modal-backdrop" id="editorModal">
     <div class="modal-card" style="max-width:920px;">
       <div class="modal-head">
-        <span style="font-size:15px;font-weight:700;">포켓몬 상세 편집 (Lv.50 · 6V 고정 · SP 66)</span>
-        <button type="button" class="btn" onclick="closeSlotEditor()">닫기</button>
+        <span style="font-size:15px;font-weight:700;" data-i18n="editorTitle">포켓몬 상세 편집 (Lv.50 · 6V 고정 · SP 66)</span>
+        <button type="button" class="btn" data-i18n="btnClose" onclick="closeSlotEditor()">닫기</button>
       </div>
       <div class="modal-body">
         <div id="editorSlotTabs" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
         <div class="editor-2col">
           <div style="display:flex;flex-direction:column;gap:10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span class="modal-sec-label">포켓몬 · 도구 · 특성 · 기술</span>
+              <span class="modal-sec-label" data-i18n="editorBasicSec">포켓몬 · 도구 · 특성 · 기술</span>
               <span id="quickMegaStoneContainer" style="display:flex;gap:4px;"></span>
             </div>
             <div style="display:grid;grid-template-columns:1fr 110px;gap:8px;">
-              <input type="text" id="edSpecies" list="speciesDatalist" class="ctrl-input" placeholder="포켓몬 (한/일/영)" onchange="onEditorSpeciesChange()" />
+              <input type="text" id="edSpecies" list="speciesDatalist" class="ctrl-input" data-i18n-placeholder="phSpecies" placeholder="포켓몬 (한/일/영)" onchange="onEditorSpeciesChange()" />
               <select id="edGender" class="ctrl-input" onchange="saveSlotFromEditor()">
-                <option value="">성별 미표시</option>
+                <option value="" data-i18n="genderNone">성별 미표시</option>
                 <option value="M">♂ (M)</option>
                 <option value="F">♀ (F)</option>
               </select>
             </div>
-            <input type="text" id="edItem" list="itemsDatalist" class="ctrl-input" placeholder="지닌물건 (한/일/영)" onchange="saveSlotFromEditor()" />
+            <input type="text" id="edItem" list="itemsDatalist" class="ctrl-input" data-i18n-placeholder="phItem" placeholder="지닌물건 (한/일/영)" onchange="saveSlotFromEditor()" />
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-              <input type="text" id="edAbility" list="abilitiesDatalist" class="ctrl-input" placeholder="특성" onchange="saveSlotFromEditor()" />
+              <input type="text" id="edAbility" list="abilitiesDatalist" class="ctrl-input" data-i18n-placeholder="phAbility" placeholder="특성" onchange="saveSlotFromEditor()" />
               <select id="edNature" class="ctrl-input" onchange="saveSlotFromEditor()"></select>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-              <input type="text" id="edMove0" list="movesDatalist" class="ctrl-input" placeholder="기술 1" onchange="saveSlotFromEditor()" />
-              <input type="text" id="edMove1" list="movesDatalist" class="ctrl-input" placeholder="기술 2" onchange="saveSlotFromEditor()" />
-              <input type="text" id="edMove2" list="movesDatalist" class="ctrl-input" placeholder="기술 3" onchange="saveSlotFromEditor()" />
-              <input type="text" id="edMove3" list="movesDatalist" class="ctrl-input" placeholder="기술 4" onchange="saveSlotFromEditor()" />
+              <input type="text" id="edMove0" list="movesDatalist" class="ctrl-input" data-i18n-placeholder="phMove1" placeholder="기술 1" onchange="saveSlotFromEditor()" />
+              <input type="text" id="edMove1" list="movesDatalist" class="ctrl-input" data-i18n-placeholder="phMove2" placeholder="기술 2" onchange="saveSlotFromEditor()" />
+              <input type="text" id="edMove2" list="movesDatalist" class="ctrl-input" data-i18n-placeholder="phMove3" placeholder="기술 3" onchange="saveSlotFromEditor()" />
+              <input type="text" id="edMove3" list="movesDatalist" class="ctrl-input" data-i18n-placeholder="phMove4" placeholder="기술 4" onchange="saveSlotFromEditor()" />
             </div>
           </div>
 
           <div style="display:flex;flex-direction:column;gap:10px;">
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span class="modal-sec-label">능력 포인트 (SP) 배분 및 실능</span>
+              <span class="modal-sec-label" data-i18n="editorSpSec">능력 포인트 (SP) 배분 및 실능</span>
               <span id="edSpTotalBadge" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;">0 / 66 SP</span>
             </div>
             <div id="spSlidersContainer" style="display:flex;flex-direction:column;gap:8px;"></div>
             <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;">
-              <button type="button" class="btn" onclick="resetCurrentSlotSP()">SP 초기화</button>
+              <button type="button" class="btn" data-i18n="btnResetSp" onclick="resetCurrentSlotSP()">SP 초기화</button>
               <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;">
                 <input type="checkbox" id="edForceMegaView" onchange="saveSlotFromEditor()" />
-                <span>메가스톤 보유 시 메가진화 폼 표시</span>
+                <span data-i18n="lblForceMega">메가스톤 보유 시 메가진화 폼 표시</span>
               </label>
             </div>
           </div>
         </div>
       </div>
       <div class="modal-foot">
-        <span class="modal-subhint">모든 수정 사항은 즉시 16:9 시트에 반영됩니다.</span>
-        <button type="button" class="btn btn-primary-cta" onclick="closeSlotEditor()">확인</button>
+        <span class="modal-subhint" data-i18n="editorFootHint">모든 수정 사항은 즉시 16:9 시트에 반영됩니다.</span>
+        <button type="button" class="btn btn-primary-cta" data-i18n="btnDone" onclick="closeSlotEditor()">확인</button>
       </div>
     </div>
   </div>
@@ -213,27 +220,34 @@
   <div class="modal-backdrop" id="ocrModal">
     <div class="modal-card ocr-modal-card">
       <div class="modal-head">
-        <span style="font-size:15px;font-weight:700;">스샷 자동 인식 (능력 · 스테이터스 → 쇼다운)</span>
+        <span style="font-size:15px;font-weight:700;" data-i18n="ocrTitle">스샷 자동 인식 (능력 · 스테이터스 → 쇼다운)</span>
         <div style="display:flex;gap:6px;">
-          <button type="button" class="btn" id="ocrClearBtn" onclick="clearOcrState()" style="display:none;">스샷 내역 초기화</button>
-          <button type="button" class="btn" onclick="closeOcrModal()">닫기</button>
+          <button type="button" class="btn" id="ocrClearBtn" data-i18n="btnOcrClear" onclick="clearOcrState()" style="display:none;">스샷 내역 초기화</button>
+          <button type="button" class="btn" data-i18n="btnClose" onclick="closeOcrModal()">닫기</button>
         </div>
       </div>
       <div class="modal-body">
         <div class="ocr-drop-banner" id="ocrDropBanner">
           <div class="ocr-drop-copy">
-            <strong>화면 어디서나 <code>Ctrl+V</code>로 스샷을 붙여넣거나 이미지를 드래그하세요</strong>
-            <span>[능력] 탭과 [스테이터스] 탭 스샷을 순서 상관없이 입력하면 자동으로 저장·병합되어 쇼다운 텍스트와 16:9 시트에 즉시 반영됩니다.</span>
+            <strong data-i18n-html="ocrDropTitle">화면 어디서나 <code>Ctrl+V</code>로 스샷을 붙여넣거나 이미지를 드래그하세요</strong>
+            <span data-i18n="ocrDropDesc">[능력] 탭과 [스테이터스] 탭 스샷(한국어 · 일본어 · 영어)을 순서 상관없이 입력하면 자동으로 저장·병합되어 쇼다운 텍스트와 16:9 시트에 즉시 반영됩니다.</span>
           </div>
-          <label class="btn btn-primary-cta" style="cursor:pointer;flex-shrink:0;">
-            <span>이미지 파일 선택</span>
-            <input id="screenshotFileInput" type="file" accept="image/*" multiple hidden onchange="handleScreenshotInputChange(event)" />
-          </label>
+          <div class="ocr-drop-actions">
+            <div class="ocr-lang-switch" id="ocrLangSwitch" role="group" data-i18n-aria="ocrLangAria" aria-label="스샷 인식 언어">
+              <span class="ocr-lang-label" data-i18n="ocrLangLabel">인식 언어</span>
+              <button type="button" class="ocr-lang-btn active" data-ocr-lang="ko" onclick="setOcrModelLanguage('ko')">KO / EN</button>
+              <button type="button" class="ocr-lang-btn" data-ocr-lang="ja" onclick="setOcrModelLanguage('ja')">JP</button>
+            </div>
+            <label class="btn btn-primary-cta" style="cursor:pointer;flex-shrink:0;">
+              <span data-i18n="btnSelectImages">이미지 파일 선택</span>
+              <input id="screenshotFileInput" type="file" accept="image/*" multiple hidden onchange="handleScreenshotInputChange(event)" />
+            </label>
+          </div>
         </div>
 
         <div class="ocr-progress-wrap" id="ocrProgressWrap" hidden>
           <div class="ocr-progress-head">
-            <span id="ocrProgressText">OCR 엔진 준비 중...</span>
+            <span id="ocrProgressText" data-i18n="ocrInitProgress">OCR 엔진 준비 중...</span>
             <span id="ocrProgressPct">0%</span>
           </div>
           <div class="ocr-progress-track">
@@ -243,11 +257,11 @@
 
         <div class="ocr-tabs-status">
           <div class="ocr-tab-box" id="ocrAbilityBox">
-            <span class="ocr-tab-name">[능력] 탭 (특성·도구·기술)</span>
+            <span class="ocr-tab-name" data-i18n="ocrTabAbilityBox">[능력] 탭 (특성·도구·기술)</span>
             <span class="ocr-tab-state" id="ocrAbilityState">미등록</span>
           </div>
           <div class="ocr-tab-box" id="ocrStatusBox">
-            <span class="ocr-tab-name">[스테이터스] 탭 (능력치·SP·성격)</span>
+            <span class="ocr-tab-name" data-i18n="ocrTabStatusBox">[스테이터스] 탭 (능력치·SP·성격)</span>
             <span class="ocr-tab-state" id="ocrStatusState">미등록</span>
           </div>
         </div>
@@ -257,18 +271,18 @@
 
         <div class="ocr-preview-wrap" id="ocrPreviewWrap" hidden>
           <div class="ocr-preview-head">
-            <span class="modal-subhint">자동 변환된 쇼다운 텍스트 (이미 16:9 시트에 자동 반영됨)</span>
+            <span class="modal-subhint" data-i18n="ocrPreviewTitle">자동 변환된 쇼다운 텍스트 (이미 16:9 시트에 자동 반영됨)</span>
             <div style="display:flex;gap:6px;">
-              <button type="button" class="btn" onclick="copyOcrShowdownText()">텍스트 복사</button>
-              <button type="button" class="btn" onclick="openPasteWithOcrText()">텍스트 편집기로 열기</button>
+              <button type="button" class="btn" data-i18n="btnCopyText" onclick="copyOcrShowdownText()">텍스트 복사</button>
+              <button type="button" class="btn" data-i18n="btnOpenInPaste" onclick="openPasteWithOcrText()">텍스트 편집기로 열기</button>
             </div>
           </div>
           <textarea id="ocrShowdownPreview" class="paste-area ocr-preview-area" readonly></textarea>
         </div>
       </div>
       <div class="modal-foot">
-        <span class="modal-subhint">100% 브라우저 로컬 ONNX OCR (서버 전송 없음 · 새로고침 시 유지)</span>
-        <button type="button" class="btn btn-primary-cta" onclick="closeOcrModal()">확인</button>
+        <span class="modal-subhint" data-i18n="ocrFootHint">100% 브라우저 로컬 ONNX OCR (서버 전송 없음 · 새로고침 시 유지)</span>
+        <button type="button" class="btn btn-primary-cta" data-i18n="btnDone" onclick="closeOcrModal()">확인</button>
       </div>
     </div>
   </div>
@@ -279,8 +293,8 @@
   <datalist id="movesDatalist"></datalist>
   <div class="toast" id="toastBox"></div>
 
-  <script src="./core.js?v=20261115h"></script>
-  <script src="./ocr-engine.js?v=20261115h"></script>
-  <script src="./app.js?v=20261115h"></script>
+  <script src="./core.js?v=20261115n"></script>
+  <script src="./ocr-engine.js?v=20261115n"></script>
+  <script src="./app.js?v=20261115n"></script>
 </body>
 </html>

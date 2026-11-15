@@ -3,9 +3,83 @@
 let currentParty = [];
 let editingSlotIdx = 0;
 let lastErrorMsg = '';
+let lastErrorKey = '';
 let toastTimer = null;
 let isSavingImage = false;
 let datalistsInitialized = false;
+let datalistsLang = '';
+let currentUiLang = (window.APP_I18N && window.APP_I18N.detectBrowserUiLang()) || 'ko';
+window.UI_LANG = currentUiLang;
+
+function updateMobileSubbarToggleLabel() {
+  const btn = document.getElementById('mobileSubbarToggle');
+  if (!btn) return;
+  const isOpen = document.body.classList.contains('mobile-subbar-open');
+  btn.textContent = t(isOpen ? 'settingsHide' : 'settingsShow');
+}
+
+function applyUiTranslations() {
+  document.documentElement.lang = currentUiLang;
+  document.title = t('docTitle');
+
+  document.querySelectorAll('.ui-lang-btn').forEach(btn => {
+    const active = btn.dataset.uiLang === currentUiLang;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => {
+    el.innerHTML = t(el.dataset.i18nHtml);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAria));
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.setAttribute('title', t(el.dataset.i18nTitle));
+  });
+
+  updateMobileSubbarToggleLabel();
+}
+
+function setUiLanguage(nextLang, opts = {}) {
+  const norm = window.APP_I18N ? window.APP_I18N.normalizeUiLang(nextLang) : nextLang;
+  if (!norm) return;
+  currentUiLang = norm;
+  window.UI_LANG = currentUiLang;
+  if (!opts.preserveCardLang) {
+    ocrModelLang = null;
+  }
+  const langSel = document.getElementById('langSelect');
+  if (langSel && !opts.preserveCardLang) {
+    langSel.value = currentUiLang;
+  }
+  applyUiTranslations();
+  initEditorDatalists(true);
+
+  if (currentParty.length > 0 && document.getElementById('editorModal')?.classList.contains('open')) {
+    renderEditorTabs();
+    loadSlotIntoEditor(editingSlotIdx);
+  } else if (document.getElementById('spRange_hp')) {
+    renderSpSliders();
+  }
+
+  if ((ocrState.abilityCards.length || ocrState.statusCards.length) && ocrDbRef && window.ChampionsOcr) {
+    applyOcrMergeAndRefresh(ocrDbRef, '', { skipToast: true, skipPartyReset: true });
+  } else {
+    renderOcrStatusUi();
+  }
+
+  renderSheet();
+  if (!opts.silent) {
+    showToast(t('toastUiLangChanged'));
+  }
+}
 
 // Pre-baked sprite shadow cache & sliced 24x24 item icon cache for instant (<0.2s) PNG export
 const bakedSpriteCache = new Map();
@@ -118,13 +192,14 @@ function renderSheet() {
   gridEl.className = `party-grid ${gridMode === '2x3' ? 'grid-2x3' : ''}`;
   gridEl.innerHTML = '';
 
-  if (lastErrorMsg) {
+  if (lastErrorKey || lastErrorMsg) {
+    const shownErr = lastErrorKey ? t(lastErrorKey) : lastErrorMsg;
     gridEl.innerHTML = `
       <div class="state-panel">
-        <div class="state-title">${lastErrorMsg}</div>
-        <div class="state-desc">포켓몬 영문명·국문명·일문명이 올바른 쇼다운 형식인지 확인해주세요.</div>
+        <div class="state-title">${shownErr}</div>
+        <div class="state-desc">${t('errDesc')}</div>
         <div class="state-actions">
-          <button type="button" class="btn btn-primary-cta state-btn" onclick="openPasteModal()">쇼다운 텍스트 다시 입력</button>
+          <button type="button" class="btn btn-primary-cta state-btn" onclick="openPasteModal()">${t('errRetryBtn')}</button>
         </div>
       </div>`;
     fitStageToViewport();
@@ -135,12 +210,12 @@ function renderSheet() {
   if (!currentParty.length) {
     gridEl.innerHTML = `
       <div class="state-panel">
-        <div class="state-title">등록된 포켓몬 파티가 없습니다</div>
-        <div class="state-desc">게임 내 [능력]·[스테이터스] 스샷을 <b>Ctrl+V</b>로 붙여넣거나 쇼다운 텍스트 · .txt 파일을 드래그 앤 드롭하세요.</div>
+        <div class="state-title">${t('emptyTitle')}</div>
+        <div class="state-desc">${t('emptyDesc')}</div>
         <div class="state-actions">
-          <button type="button" class="btn btn-primary-cta state-btn" onclick="openOcrModal()">스샷 자동 인식 (Ctrl+V)</button>
-          <button type="button" class="btn state-btn" onclick="openPasteModal()">쇼다운 텍스트 입력 / .txt</button>
-          <button type="button" class="btn state-btn" onclick="openSlotEditor(0)">새 파티 짜기</button>
+          <button type="button" class="btn btn-primary-cta state-btn" onclick="openOcrModal()">${t('emptyBtnOcr')}</button>
+          <button type="button" class="btn state-btn" onclick="openPasteModal()">${t('emptyBtnPaste')}</button>
+          <button type="button" class="btn state-btn" onclick="openSlotEditor(0)">${t('emptyBtnManual')}</button>
         </div>
       </div>`;
     fitStageToViewport();
@@ -510,9 +585,8 @@ function togglePresentationMode() {
 }
 
 function toggleMobileSubbar() {
-  const isOpen = document.body.classList.toggle('mobile-subbar-open');
-  const btn = document.getElementById('mobileSubbarToggle');
-  if (btn) btn.textContent = isOpen ? '설정 닫기 ▴' : '시트 설정 ▾';
+  document.body.classList.toggle('mobile-subbar-open');
+  updateMobileSubbarToggleLabel();
   setTimeout(fitStageToViewport, 30);
 }
 
@@ -939,14 +1013,12 @@ async function download16x9Image() {
   isSavingImage = true;
 
   const saveBtn = document.querySelector('.topbar-right .btn-primary-cta');
-  const prevBtnText = saveBtn ? (saveBtn.dataset.origLabel || saveBtn.textContent) : '';
   if (saveBtn) {
-    saveBtn.dataset.origLabel = prevBtnText;
     if (saveBtn._doneTimer) clearTimeout(saveBtn._doneTimer);
     saveBtn.disabled = true;
-    saveBtn.textContent = '이미지 생성 중...';
+    saveBtn.textContent = t('btnGeneratingPng');
   }
-  showToast('16:9 PNG 이미지를 준비 중입니다...');
+  showToast(t('toastPreparingPng'));
 
   const scaler = document.getElementById('stageScaler');
   const sheet = document.getElementById('sheet16x9');
@@ -1090,7 +1162,7 @@ async function download16x9Image() {
       blob = await new Promise(resolve => fallbackCanvas.toBlob(resolve, 'image/png'));
     }
 
-    const titleSlug = (document.getElementById('metaTitle').value || '포챔스_파티').replace(/[\\/:*?"<>|]/g, '_');
+    const titleSlug = (document.getElementById('metaTitle').value || t('pngDefaultSlug')).replace(/[\\/:*?"<>|]/g, '_');
     const link = document.createElement('a');
     link.download = `${titleSlug}_16x9.png`;
     link.style.display = 'none';
@@ -1110,23 +1182,23 @@ async function download16x9Image() {
       link.remove();
       downloadStarted = true;
     }
-    showToast('이미지 생성 완료 · 브라우저에서 다운로드를 시작합니다. 완료 전 창을 닫지 마세요.', 4500);
+    showToast(t('toastPngStarted'), 4500);
     if (saveBtn && downloadStarted) {
-      saveBtn.textContent = '다운로드 시작됨 ✓';
+      saveBtn.textContent = t('btnDownloadStarted');
       saveBtn._doneTimer = setTimeout(() => {
-        saveBtn.textContent = prevBtnText;
+        saveBtn.textContent = t('btnSavePng');
       }, 1600);
     }
   } catch (err) {
-    showToast('이미지 캡처 중 오류가 발생했습니다. 전체화면(F) 캡처를 이용해주세요.', 3500);
-    if (saveBtn) saveBtn.textContent = prevBtnText;
+    showToast(t('toastPngError'), 3500);
+    if (saveBtn) saveBtn.textContent = t('btnSavePng');
   } finally {
     restoreLayout();
     isSavingImage = false;
     if (saveBtn) {
       saveBtn.disabled = false;
-      if (saveBtn.textContent === '이미지 생성 중...') {
-        saveBtn.textContent = prevBtnText;
+      if (saveBtn.textContent === t('btnGeneratingPng')) {
+        saveBtn.textContent = t('btnSavePng');
       }
     }
   }
@@ -1154,40 +1226,58 @@ function applyPasteInput() {
   if (!raw) {
     currentParty = [];
     lastErrorMsg = '';
+    lastErrorKey = '';
     closePasteModal();
     renderSheet();
     return;
   }
   const res = parseShowdownPaste(raw, document.getElementById('megaModeSelect').value === 'auto');
   if (!res.party.length) {
-    lastErrorMsg = '유효한 포켓몬 쇼다운 데이터를 인식하지 못했습니다.';
+    lastErrorKey = 'errInvalidPaste';
+    lastErrorMsg = t('errInvalidPaste');
     closePasteModal();
     renderSheet();
     return;
   }
+  lastErrorKey = '';
   lastErrorMsg = '';
   currentParty = res.party;
   closePasteModal();
   renderSheet();
-  showToast(res.convertedFrom252 ? '252 노력치를 포챔스 SP(최대 32 / 합계 66)로 환산하여 적용했습니다.' : `총 ${res.party.length}마리 파티가 적용되었습니다.`);
+  showToast(res.convertedFrom252 ? t('toastConverted252') : t('toastPartyApplied', { count: res.party.length }));
 }
 
 function copyShowdownExport() {
-  navigator.clipboard.writeText(exportToShowdownPaste(currentParty)).then(() => showToast('쇼다운 텍스트가 복사되었습니다.'));
+  navigator.clipboard.writeText(exportToShowdownPaste(currentParty)).then(() => showToast(t('toastCopied')));
+}
+
+function formatDatalistOption(v) {
+  const pick = window.APP_I18N.pickNameForUi;
+  const primary = pick(v);
+  if (currentUiLang === 'ja') return `<option value="${primary}">${v.name || ''} · ${v.ko || ''}</option>`;
+  if (currentUiLang === 'en') return `<option value="${primary}">${v.ja || ''} · ${v.ko || ''}</option>`;
+  return `<option value="${primary}">${v.ja || ''} · ${v.name || ''}</option>`;
 }
 
 // Interactive Slot Editor
-function initEditorDatalists() {
-  if (datalistsInitialized) return;
+function initEditorDatalists(force = false) {
+  if (datalistsInitialized && !force && datalistsLang === currentUiLang) return;
   datalistsInitialized = true;
-  document.getElementById('speciesDatalist').innerHTML = Object.values(D.dex).map(v => `<option value="${v.ko}">${v.ja || ''} · ${v.name}</option>`).join('');
-  document.getElementById('itemsDatalist').innerHTML = Object.values(D.items).map(v => `<option value="${v.ko}">${v.ja || ''} · ${v.name}</option>`).join('');
-  document.getElementById('abilitiesDatalist').innerHTML = Object.values(D.abilities).map(v => `<option value="${v.ko}">${v.ja || ''} · ${v.name}</option>`).join('');
-  document.getElementById('movesDatalist').innerHTML = Object.values(D.moves).map(v => `<option value="${v.ko}">${v.ja || ''} · ${v.name}</option>`).join('');
-  document.getElementById('edNature').innerHTML = Object.entries(NATURES).map(([k, v]) => {
-    const mod = v.plus ? `+${STAT_LABELS[v.plus].ko} / -${STAT_LABELS[v.minus].ko}` : '무보정';
+  datalistsLang = currentUiLang;
+  document.getElementById('speciesDatalist').innerHTML = Object.values(D.dex).map(formatDatalistOption).join('');
+  document.getElementById('itemsDatalist').innerHTML = Object.values(D.items).map(formatDatalistOption).join('');
+  document.getElementById('abilitiesDatalist').innerHTML = Object.values(D.abilities).map(formatDatalistOption).join('');
+  document.getElementById('movesDatalist').innerHTML = Object.values(D.moves).map(formatDatalistOption).join('');
+  const natEl = document.getElementById('edNature');
+  const prevNat = natEl.value || 'Serious';
+  const statLblKey = currentUiLang === 'ja' ? 'ja' : (currentUiLang === 'en' ? 'en' : 'ko');
+  natEl.innerHTML = Object.entries(NATURES).map(([k, v]) => {
+    const mod = v.plus ? `+${STAT_LABELS[v.plus][statLblKey]} / -${STAT_LABELS[v.minus][statLblKey]}` : t('natureNeutral');
+    if (currentUiLang === 'ja') return `<option value="${k}">${v.ja} (${v.en}) [${mod}]</option>`;
+    if (currentUiLang === 'en') return `<option value="${k}">${v.en} [${mod}]</option>`;
     return `<option value="${k}">${v.ko} (${v.ja} / ${v.en}) [${mod}]</option>`;
   }).join('');
+  natEl.value = prevNat;
 }
 
 function openSlotEditor(idx) {
@@ -1213,41 +1303,44 @@ function openSlotEditor(idx) {
 function closeSlotEditor() { document.getElementById('editorModal').classList.remove('open'); }
 
 function renderEditorTabs() {
+  const pick = window.APP_I18N.pickNameForUi;
   document.getElementById('editorSlotTabs').innerHTML = currentParty.map((s, i) => {
     const sp = D.dex[s.speciesId] || D.dex.pikachu;
-    return `<button type="button" class="btn ${i === editingSlotIdx ? 'active-chip' : ''}" onclick="openSlotEditor(${i})">#0${i + 1} ${sp.ko}</button>`;
+    return `<button type="button" class="btn ${i === editingSlotIdx ? 'active-chip' : ''}" onclick="openSlotEditor(${i})">#0${i + 1} ${pick(sp)}</button>`;
   }).join('');
 }
 
 function loadSlotIntoEditor(idx) {
   const slot = currentParty[idx];
   if (!slot) return;
+  const pick = window.APP_I18N.pickNameForUi;
   const sp = D.dex[slot.speciesId] || D.dex.pikachu;
   const it = D.items[slot.itemId];
   const ab = D.abilities[slot.abilityId];
 
-  document.getElementById('edSpecies').value = sp.ko;
+  document.getElementById('edSpecies').value = pick(sp);
   document.getElementById('edGender').value = slot.gender || '';
-  document.getElementById('edItem').value = it ? it.ko : '';
-  document.getElementById('edAbility').value = ab ? ab.ko : slot.abilityId;
+  document.getElementById('edItem').value = it ? pick(it) : '';
+  document.getElementById('edAbility').value = ab ? pick(ab) : slot.abilityId;
   document.getElementById('edNature').value = slot.nature || 'Serious';
   document.getElementById('edForceMegaView').checked = Boolean(slot.showMega);
 
   for (let m = 0; m < 4; m++) {
     const mv = D.moves[slot.moves[m]];
-    document.getElementById(`edMove${m}`).value = mv ? mv.ko : (slot.moves[m] || '');
+    document.getElementById(`edMove${m}`).value = mv ? pick(mv) : (slot.moves[m] || '');
   }
 
   const stones = findDedicatedMegaStones(sp);
   document.getElementById('quickMegaStoneContainer').innerHTML = stones.map(st =>
-    `<button type="button" class="btn" style="height:26px;font-size:11.5px;" onclick="equipMegaStone('${st.ko}')">${st.ko} 장착</button>`
+    `<button type="button" class="btn" style="height:26px;font-size:11.5px;" onclick="equipMegaStone('${st.id}')">${t('equipMega', { name: pick(st) })}</button>`
   ).join('');
 
   renderSpSliders();
 }
 
-function equipMegaStone(stoneKo) {
-  document.getElementById('edItem').value = stoneKo;
+function equipMegaStone(stoneId) {
+  const st = D.items[stoneId];
+  document.getElementById('edItem').value = st ? window.APP_I18N.pickNameForUi(st) : stoneId;
   document.getElementById('edForceMegaView').checked = true;
   saveSlotFromEditor();
   loadSlotIntoEditor(editingSlotIdx);
@@ -1258,7 +1351,7 @@ function onEditorSpeciesChange() {
   const id = LOOKUP.dex[toEnKey(raw)] || LOOKUP.dex[toKey(raw)];
   if (id && D.dex[id] && D.dex[id].ab && D.dex[id].ab[0]) {
     const ab = D.abilities[toEnKey(D.dex[id].ab[0])];
-    document.getElementById('edAbility').value = ab ? ab.ko : D.dex[id].ab[0];
+    document.getElementById('edAbility').value = ab ? window.APP_I18N.pickNameForUi(ab) : D.dex[id].ab[0];
   }
   saveSlotFromEditor();
   loadSlotIntoEditor(editingSlotIdx);
@@ -1266,6 +1359,13 @@ function onEditorSpeciesChange() {
 }
 
 let spRenderRaf = 0;
+
+function formatEditorStatLabel(k) {
+  const info = STAT_LABELS[k];
+  if (currentUiLang === 'en') return info.en;
+  if (currentUiLang === 'ja') return info.ja;
+  return `${info.ko} (${info.short})`;
+}
 
 function renderSpSliders() {
   const slot = currentParty[editingSlotIdx];
@@ -1276,13 +1376,13 @@ function renderSpSliders() {
   const realStats = calcChampionsStats(activeSp.bs, slot.sp, slot.nature, activeSp.id);
   const total = STAT_KEYS.reduce((a, k) => a + Number(slot.sp[k] || 0), 0);
 
-  document.getElementById('edSpTotalBadge').textContent = `${total} / 66 SP (잔여 ${Math.max(0, 66 - total)})`;
+  document.getElementById('edSpTotalBadge').textContent = t('spBadge', { total, left: Math.max(0, 66 - total) });
 
   const container = document.getElementById('spSlidersContainer');
   if (!document.getElementById('spRange_hp')) {
     container.innerHTML = STAT_KEYS.map(k => `
       <div class="sp-row">
-        <span>${STAT_LABELS[k].ko} (${STAT_LABELS[k].short})</span>
+        <span id="spLbl_${k}">${formatEditorStatLabel(k)}</span>
         <input type="range" id="spRange_${k}" min="0" max="32" step="1" value="0" oninput="updateSlotSp('${k}', this.value)" />
         <input type="number" id="spNum_${k}" min="0" max="32" value="0" class="ctrl-input" style="height:28px;text-align:center;" oninput="updateSlotSp('${k}', this.value)" />
         <button type="button" id="spBtn_${k}" class="btn" style="height:26px;padding:0 6px;font-size:11px;" onclick="toggleMaxSp('${k}')">32</button>
@@ -1292,10 +1392,12 @@ function renderSpSliders() {
 
   STAT_KEYS.forEach(k => {
     const v = Number(slot.sp[k] || 0);
+    const lblEl = document.getElementById(`spLbl_${k}`);
     const rangeEl = document.getElementById(`spRange_${k}`);
     const numEl = document.getElementById(`spNum_${k}`);
     const btnEl = document.getElementById(`spBtn_${k}`);
     const realEl = document.getElementById(`spReal_${k}`);
+    if (lblEl) lblEl.textContent = formatEditorStatLabel(k);
     if (rangeEl && Number(rangeEl.value) !== v) rangeEl.value = String(v);
     if (numEl && Number(numEl.value) !== v) numEl.value = String(v);
     if (btnEl) btnEl.textContent = v === 32 ? '0' : '32';
@@ -1368,6 +1470,12 @@ let ocrSessionScreens = [];
 let ocrProcessing = false;
 let ocrProgressInfo = null;
 let ocrDbRef = null;
+let ocrModelLang = null; // null => follow currentUiLang ('ja' -> 'ja', else 'ko')
+
+function getActiveOcrLang() {
+  if (ocrModelLang === 'ja' || ocrModelLang === 'ko') return ocrModelLang;
+  return currentUiLang === 'ja' ? 'ja' : 'ko';
+}
 
 function sanitizeSavedOcrState(raw) {
   if (!raw || typeof raw !== 'object') {
@@ -1391,6 +1499,8 @@ function buildExportableState() {
     grid: document.getElementById('gridSelect').value,
     viewMode: document.getElementById('viewModeSelect').value,
     lang: document.getElementById('langSelect').value,
+    uiLang: currentUiLang,
+    ocrLang: ocrModelLang,
     megaMode: document.getElementById('megaModeSelect').value,
     showBanner: document.getElementById('showBannerCheck').checked,
     ocrState: {
@@ -1414,7 +1524,15 @@ function applyImportedState(st) {
   if (st.lang) document.getElementById('langSelect').value = st.lang;
   if (st.megaMode) document.getElementById('megaModeSelect').value = st.megaMode;
   if (typeof st.showBanner === 'boolean') document.getElementById('showBannerCheck').checked = st.showBanner;
+
+  const normSavedUi = window.APP_I18N.normalizeUiLang(st.uiLang);
+  const legacyUi = (st.lang === 'ja' || st.lang === 'en') ? st.lang : window.APP_I18N.detectBrowserUiLang();
+  currentUiLang = normSavedUi || legacyUi;
+  window.UI_LANG = currentUiLang;
+  ocrModelLang = (st.ocrLang === 'ja' || st.ocrLang === 'ko') ? st.ocrLang : null;
+
   ocrState = sanitizeSavedOcrState(st.ocrState);
+  applyUiTranslations();
   renderSheet();
   renderOcrStatusUi();
   return true;
@@ -1435,8 +1553,16 @@ function loadInitialState() {
       if (applyImportedState(parsed)) return;
     }
   } catch (_) {}
+
+  const autoLang = window.APP_I18N.detectBrowserUiLang();
+  currentUiLang = autoLang;
+  window.UI_LANG = currentUiLang;
+  const langSel = document.getElementById('langSelect');
+  if (langSel) langSel.value = autoLang;
+
   currentParty = [];
   ocrState = sanitizeSavedOcrState(null);
+  applyUiTranslations();
   renderSheet();
   renderOcrStatusUi();
 }
@@ -1512,10 +1638,11 @@ window.addEventListener('DOMContentLoaded', () => {
         const res = parseShowdownPaste(String(ev.target.result || ''), document.getElementById('megaModeSelect').value === 'auto');
         if (res.party.length) {
           lastErrorMsg = '';
+          lastErrorKey = '';
           currentParty = res.party;
           document.getElementById('metaTitle').value = txtFile.name.replace(/\.txt$/i, '');
           renderSheet();
-          showToast(`${txtFile.name} 파티가 적용되었습니다.`);
+          showToast(t('toastFileApplied', { name: txtFile.name }));
         }
       };
       r.readAsText(txtFile, 'utf-8');
@@ -1585,6 +1712,16 @@ function formatOcrProgress(info) {
   renderOcrProgressUi();
 }
 
+function getOcrStageDisplay(info) {
+  if (!info) return t('ocrWorking');
+  if (info.stageKey) {
+    const key = `ocr_stage_${info.stageKey}`;
+    const translated = t(key);
+    if (translated !== key) return translated;
+  }
+  return info.stage || t('ocrWorking');
+}
+
 function renderOcrProgressUi() {
   const wrap = document.getElementById('ocrProgressWrap');
   const txt = document.getElementById('ocrProgressText');
@@ -1599,13 +1736,20 @@ function renderOcrProgressUi() {
   wrap.hidden = false;
   const ratio = Math.max(0, Math.min(1, Number(ocrProgressInfo.ratio) || 0));
   const percent = Math.round(ratio * 100);
-  txt.textContent = ocrProgressInfo.stage || '인식 중...';
+  txt.textContent = getOcrStageDisplay(ocrProgressInfo);
   pct.textContent = `${percent}%`;
   bar.style.width = `${percent}%`;
 }
 
 function renderOcrStatusUi() {
   renderOcrProgressUi();
+
+  const activeOcrLang = getActiveOcrLang();
+  document.querySelectorAll('.ocr-lang-btn').forEach((btn) => {
+    const isActive = btn.dataset.ocrLang === activeOcrLang;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
 
   const abCount = ocrState.abilityCards.length;
   const stCount = ocrState.statusCards.length;
@@ -1614,18 +1758,18 @@ function renderOcrStatusUi() {
     if (ocrProcessing) {
       pill.hidden = false;
       pill.className = 'ocr-pill busy';
-      pill.textContent = (ocrProgressInfo && ocrProgressInfo.stage) || '스샷 OCR 인식 중...';
+      pill.textContent = ocrProgressInfo ? getOcrStageDisplay(ocrProgressInfo) : t('ocrPillWorking');
     } else if (abCount > 0 || stCount > 0) {
       pill.hidden = false;
       const warnCount = (ocrState.resolvedSets || []).reduce((acc, s) => acc + (s.warnings && s.warnings.length ? 1 : 0), 0);
       if (abCount > 0 && stCount > 0) {
         pill.className = warnCount > 0 ? 'ocr-pill partial' : 'ocr-pill complete';
         pill.textContent = warnCount > 0
-          ? `스샷 저장됨 (확인 ${warnCount})`
-          : `능력+스테이터스 ✓`;
+          ? t('ocrPillSavedWarn', { count: warnCount })
+          : t('ocrPillComplete');
       } else {
         pill.className = 'ocr-pill partial';
-        pill.textContent = abCount > 0 ? '능력 ✓ · 스테이터스 대기' : '스테이터스 ✓ · 능력 대기';
+        pill.textContent = abCount > 0 ? t('ocrPillWaitStatus') : t('ocrPillWaitAbility');
       }
     } else {
       pill.hidden = true;
@@ -1636,14 +1780,14 @@ function renderOcrStatusUi() {
   const abTxt = document.getElementById('ocrAbilityState');
   if (abBox && abTxt) {
     abBox.classList.toggle('saved', abCount > 0);
-    abTxt.textContent = abCount > 0 ? `저장됨 · ${abCount}슬롯` : '미등록';
+    abTxt.textContent = abCount > 0 ? t('ocrSavedSlots', { count: abCount }) : t('ocrUnregistered');
   }
 
   const stBox = document.getElementById('ocrStatusBox');
   const stTxt = document.getElementById('ocrStatusState');
   if (stBox && stTxt) {
     stBox.classList.toggle('saved', stCount > 0);
-    stTxt.textContent = stCount > 0 ? `저장됨 · ${stCount}슬롯` : '미등록';
+    stTxt.textContent = stCount > 0 ? t('ocrSavedSlots', { count: stCount }) : t('ocrUnregistered');
   }
 
   const clearBtn = document.getElementById('ocrClearBtn');
@@ -1663,10 +1807,10 @@ function renderOcrStatusUi() {
           <img src="${sc.previewUrl}" alt="${escapeOcrHtml(sc.name)}" />
           <div class="ocr-thumb-meta">
             <div class="ocr-tab-switch">
-              <button type="button" class="${sc.tabType === 'ability' ? 'active' : ''}" onclick="toggleOcrSessionScreenTab('${escapeOcrHtml(sc.id)}', 'ability')">능력 탭</button>
-              <button type="button" class="${sc.tabType === 'status' ? 'active' : ''}" onclick="toggleOcrSessionScreenTab('${escapeOcrHtml(sc.id)}', 'status')">스테이터스</button>
+              <button type="button" class="${sc.tabType === 'ability' ? 'active' : ''}" onclick="toggleOcrSessionScreenTab('${escapeOcrHtml(sc.id)}', 'ability')">${escapeOcrHtml(t('ocrTabBtnAbility'))}</button>
+              <button type="button" class="${sc.tabType === 'status' ? 'active' : ''}" onclick="toggleOcrSessionScreenTab('${escapeOcrHtml(sc.id)}', 'status')">${escapeOcrHtml(t('ocrTabBtnStatus'))}</button>
             </div>
-            <button type="button" class="btn" style="padding:3px 7px;font-size:11px;" onclick="removeOcrSessionScreen('${escapeOcrHtml(sc.id)}')">제거</button>
+            <button type="button" class="btn" style="padding:3px 7px;font-size:11px;" onclick="removeOcrSessionScreen('${escapeOcrHtml(sc.id)}')">${escapeOcrHtml(t('ocrRemoveBtn'))}</button>
           </div>
         </div>
       `).join('');
@@ -1683,13 +1827,20 @@ function renderOcrStatusUi() {
       summaryBox.hidden = false;
       summaryBox.innerHTML = sets.map((s) => {
         const hasWarn = Array.isArray(s.warnings) && s.warnings.length > 0;
-        const nameKo = s.speciesKo || s.speciesName || '미인식';
+        const dexSp = s.speciesId ? D.dex[s.speciesId] : null;
+        const speciesTitle = dexSp
+          ? window.APP_I18N.pickNameForUi(dexSp)
+          : (currentUiLang === 'en' ? (s.speciesName || s.speciesKo) : (s.speciesKo || s.speciesName)) || t('ocrUnknownSpecies');
+        const spTotal = Object.values(s.sp || {}).reduce((a, b) => a + (b || 0), 0);
+        const natureObj = NATURES[s.nature];
+        const natureDisp = natureObj ? window.APP_I18N.pickNameForUi(natureObj, s.nature) : (s.nature || 'Serious');
+        const natLabel = currentUiLang === 'ko' ? (s.nature || natureDisp) : natureDisp;
         const statusText = hasWarn
           ? s.warnings.join(' · ')
-          : `검증 완료 (${s.nature}, SP ${Object.values(s.sp || {}).reduce((a, b) => a + (b || 0), 0)}/66)`;
+          : t('ocrVerifiedRow', { nature: natLabel, sp: spTotal });
         return `
           <div class="ocr-summary-row ${hasWarn ? 'warn' : 'ok'}">
-            <strong><span class="ocr-slot-badge">${hasWarn ? '!' : '✓'}</span> #${s.slot + 1} ${escapeOcrHtml(nameKo)}</strong>
+            <strong><span class="ocr-slot-badge">${hasWarn ? '!' : '✓'}</span> #${s.slot + 1} ${escapeOcrHtml(speciesTitle)}</strong>
             <span>${escapeOcrHtml(statusText)}</span>
           </div>`;
       }).join('');
@@ -1741,7 +1892,7 @@ function hydrateExistingMovesOntoStatusSets(sets, db) {
   }
 }
 
-function applyOcrMergeAndRefresh(db, customToast) {
+function applyOcrMergeAndRefresh(db, customToast, opts = {}) {
   const abilityScreens = ocrState.abilityCards.length ? [ocrState.abilityCards] : [];
   const statusScreens = ocrState.statusCards.length ? [ocrState.statusCards] : [];
 
@@ -1754,7 +1905,7 @@ function applyOcrMergeAndRefresh(db, customToast) {
     return;
   }
 
-  const sets = window.ChampionsOcr.mergeAndResolveTeam(abilityScreens, statusScreens, db);
+  const sets = window.ChampionsOcr.mergeAndResolveTeam(abilityScreens, statusScreens, db, { uiLang: currentUiLang });
   if (!abilityScreens.length && statusScreens.length && currentParty.length) {
     hydrateExistingMovesOntoStatusSets(sets, db);
   }
@@ -1769,21 +1920,25 @@ function applyOcrMergeAndRefresh(db, customToast) {
   ocrState.showdownText = showdown;
   ocrState.updatedAt = Date.now();
 
-  const pasteEl = document.getElementById('pasteInput');
-  if (pasteEl) pasteEl.value = showdown;
+  if (!opts.skipPartyReset) {
+    const pasteEl = document.getElementById('pasteInput');
+    if (pasteEl) pasteEl.value = showdown;
 
-  const megaAuto = document.getElementById('megaModeSelect').value === 'auto';
-  const parsed = parseShowdownPaste(showdown, megaAuto);
+    const megaAuto = document.getElementById('megaModeSelect').value === 'auto';
+    const parsed = parseShowdownPaste(showdown, megaAuto);
 
-  if (parsed.party.length > 0) {
-    lastErrorMsg = '';
-    currentParty = parsed.party;
+    if (parsed.party.length > 0) {
+      lastErrorKey = '';
+      lastErrorMsg = '';
+      currentParty = parsed.party;
+    }
     renderSheet();
   } else {
-    renderSheet();
+    saveStateToStorage();
   }
   renderOcrStatusUi();
 
+  if (opts.skipToast) return;
   if (customToast) {
     showToast(customToast);
     return;
@@ -1791,28 +1946,28 @@ function applyOcrMergeAndRefresh(db, customToast) {
 
   const hasAb = ocrState.abilityCards.length > 0;
   const hasSt = ocrState.statusCards.length > 0;
-  const partyLen = parsed.party.length;
+  const partyLen = currentParty.length || sets.length;
   if (hasAb && hasSt) {
     const warnSlots = sets.filter((s) => s.warnings && s.warnings.length > 0).length;
     showToast(
       warnSlots > 0
-        ? `능력+스테이터스 병합 완료 (${partyLen}마리 시트 반영 · 확인 ${warnSlots}건)`
-        : `스샷 인식 완료! ${partyLen}마리 쇼다운 변환 및 16:9 시트 반영 완료`,
+        ? t('toastOcrMergedWarn', { count: partyLen, warn: warnSlots })
+        : t('toastOcrMergedOk', { count: partyLen }),
     );
   } else if (hasAb) {
-    showToast(`[능력] 탭 ${partyLen}마리 저장·반영! [스테이터스] 스샷도 붙여넣으면 능력치·성격이 병합됩니다.`);
+    showToast(t('toastOcrOnlyAb', { count: partyLen }));
   } else {
-    showToast(`[스테이터스] 탭 ${partyLen}마리 저장·반영! [능력] 스샷도 붙여넣으면 기술·특성·도구가 병합됩니다.`);
+    showToast(t('toastOcrOnlySt', { count: partyLen }));
   }
 }
 
 async function handleScreenshotFiles(fileList) {
   if (!window.ChampionsOcr) {
-    showToast('OCR 모듈이 아직 로드되지 않았습니다.');
+    showToast(t('toastOcrNotLoaded'));
     return;
   }
   if (ocrProcessing) {
-    showToast('이전 스크린샷을 인식하는 중입니다. 잠시만 기다려주세요.');
+    showToast(t('toastOcrBusy'));
     return;
   }
 
@@ -1820,7 +1975,7 @@ async function handleScreenshotFiles(fileList) {
   if (!files.length) return;
 
   ocrProcessing = true;
-  formatOcrProgress({ stage: '이미지 분석 준비 중...', ratio: 0.05 });
+  formatOcrProgress({ stage: t('ocrStagePrepare'), ratio: 0.05 });
   renderOcrStatusUi();
 
   const seenTabsInBatch = new Set();
@@ -1830,13 +1985,14 @@ async function handleScreenshotFiles(fileList) {
     for (let idx = 0; idx < files.length; idx++) {
       const file = files[idx];
       formatOcrProgress({
-        stage: `스샷 (${idx + 1}/${files.length}) OCR 인식 중...`,
+        stage: t('ocrStageBatch', { idx: idx + 1, total: files.length }),
         ratio: Math.min(0.95, 0.1 + (idx / files.length) * 0.8),
       });
       renderOcrStatusUi();
 
       const loaded = await window.ChampionsOcr.loadImageFileToCanvas(file);
       const res = await window.ChampionsOcr.analyzeAndRecognizeCanvas(loaded.canvas, {
+        ocrLang: getActiveOcrLang(),
         onProgress: formatOcrProgress,
       });
       ocrDbRef = res.db;
@@ -1872,12 +2028,12 @@ async function handleScreenshotFiles(fileList) {
     }
 
     if (ocrDbRef) {
-      const note = teamResetByNewParty ? '새 파티로 인식되어 기존 반대 탭 스샷을 초기화 후 적용했습니다.' : '';
+      const note = teamResetByNewParty ? t('toastOcrNewPartyReset') : '';
       applyOcrMergeAndRefresh(ocrDbRef, note || undefined);
     }
   } catch (err) {
     console.error('[ChampionsOCR]', err);
-    showToast(err && err.message ? err.message : '스크린샷 OCR 중 오류가 발생했습니다.');
+    showToast(err && err.message ? err.message : t('toastOcrGenericError'));
   } finally {
     ocrProcessing = false;
     ocrProgressInfo = null;
@@ -1893,12 +2049,14 @@ async function toggleOcrSessionScreenTab(screenId, nextTab) {
   if (sc.tabType === nextTab) return;
 
   ocrProcessing = true;
-  formatOcrProgress({ stage: `${nextTab === 'ability' ? '능력' : '스테이터스'} 탭으로 재인식 중...`, ratio: 0.4 });
+  const tabWord = t(nextTab === 'ability' ? 'ocrTabWordAbility' : 'ocrTabWordStatus');
+  formatOcrProgress({ stage: t('ocrStageRetab', { tab: tabWord }), ratio: 0.4 });
   renderOcrStatusUi();
 
   try {
     const res = await window.ChampionsOcr.analyzeAndRecognizeCanvas(sc.canvas, {
       overrideTab: nextTab,
+      ocrLang: getActiveOcrLang(),
       onProgress: formatOcrProgress,
     });
     ocrDbRef = res.db;
@@ -1919,7 +2077,7 @@ async function toggleOcrSessionScreenTab(screenId, nextTab) {
     applyOcrMergeAndRefresh(res.db);
   } catch (err) {
     console.error('[ChampionsOCR]', err);
-    showToast(err && err.message ? err.message : '탭 재인식 중 오류가 발생했습니다.');
+    showToast(err && err.message ? err.message : t('toastOcrRetabError'));
   } finally {
     ocrProcessing = false;
     ocrProgressInfo = null;
@@ -1937,7 +2095,7 @@ async function removeOcrSessionScreen(screenId) {
   if (ocrState.abilityCards.length || ocrState.statusCards.length) {
     const db = ocrDbRef || await window.ChampionsOcr.loadDb();
     ocrDbRef = db;
-    applyOcrMergeAndRefresh(db, '선택한 스샷을 제외하고 다시 반영했습니다.');
+    applyOcrMergeAndRefresh(db, t('toastOcrScreenRemoved'));
   } else {
     ocrState.resolvedSets = [];
     ocrState.showdownText = '';
@@ -1949,16 +2107,65 @@ async function removeOcrSessionScreen(screenId) {
 
 function clearOcrState() {
   ocrSessionScreens = [];
+  ocrModelLang = null;
   ocrState = sanitizeSavedOcrState(null);
   saveStateToStorage();
   renderOcrStatusUi();
-  showToast('저장된 스샷 인식 내역을 초기화했습니다.');
+  showToast(t('toastOcrCleared'));
+}
+
+async function setOcrModelLanguage(nextLang) {
+  if (ocrProcessing) {
+    showToast(t('toastOcrBusy'));
+    return;
+  }
+  const norm = nextLang === 'ja' ? 'ja' : 'ko';
+  const prev = getActiveOcrLang();
+  ocrModelLang = norm;
+  renderOcrStatusUi();
+  saveStateToStorage();
+
+  if (prev === norm || !ocrSessionScreens.length || !window.ChampionsOcr) return;
+
+  ocrProcessing = true;
+  formatOcrProgress({ stage: t('ocrStageRelang'), ratio: 0.15 });
+  renderOcrStatusUi();
+
+  try {
+    ocrState.abilityCards = [];
+    ocrState.statusCards = [];
+    for (const sc of ocrSessionScreens) {
+      const res = await window.ChampionsOcr.analyzeAndRecognizeCanvas(sc.canvas, {
+        overrideTab: sc.tabType,
+        ocrLang: norm,
+        onProgress: formatOcrProgress,
+      });
+      ocrDbRef = res.db;
+      sc.abilityCards = res.abilityCards;
+      sc.statusCards = res.statusCards;
+      if (sc.tabType === 'ability') ocrState.abilityCards = res.abilityCards;
+      else ocrState.statusCards = res.statusCards;
+    }
+    if (ocrDbRef) {
+      applyOcrMergeAndRefresh(
+        ocrDbRef,
+        t('toastOcrRelangDone', { lang: norm === 'ja' ? 'JP' : 'KO / EN' }),
+      );
+    }
+  } catch (err) {
+    console.error('[ChampionsOCR]', err);
+    showToast(err && err.message ? err.message : t('toastOcrGenericError'));
+  } finally {
+    ocrProcessing = false;
+    ocrProgressInfo = null;
+    renderOcrStatusUi();
+  }
 }
 
 function copyOcrShowdownText() {
   const text = ocrState.showdownText || exportToShowdownPaste(currentParty);
   if (!text) return;
-  navigator.clipboard.writeText(text).then(() => showToast('쇼다운 텍스트가 복사되었습니다.'));
+  navigator.clipboard.writeText(text).then(() => showToast(t('toastCopied')));
 }
 
 function openPasteWithOcrText() {

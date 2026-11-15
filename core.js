@@ -424,20 +424,33 @@ function parseShowdownPaste(rawText, defaultShowMega) {
 
     for (let l = 1; l < lines.length; l++) {
       const line = lines[l];
-      if (/^(Ability|특성)\s*:/i.test(line)) {
-        abilityRaw = line.replace(/^(Ability|특성)\s*:\s*/i, '').trim();
-      } else if (/^(EVs|SPs|노력치|능력포인트)\s*:/i.test(line)) {
-        const parts = line.replace(/^(EVs|SPs|노력치|능력포인트)\s*:\s*/i, '').split('/');
-        const mapU = { hp: 'hp', h: 'hp', '체력': 'hp', atk: 'atk', a: 'atk', '공격': 'atk', def: 'def', b: 'def', '방어': 'def', spa: 'spa', c: 'spa', '특공': 'spa', spd: 'spd', d: 'spd', '특방': 'spd', spe: 'spe', s: 'spe', '스피드': 'spe' };
+      if (/^(Ability|특성|特性|とくせい)\s*[:：]/i.test(line)) {
+        abilityRaw = line.replace(/^(Ability|특성|特性|とくせい)\s*[:：]\s*/i, '').trim();
+      } else if (/^(EVs|SPs|SP|노력치|능력포인트|努力値|ステータスポイント)\s*[:：]/i.test(line)) {
+        const parts = line.replace(/^(EVs|SPs|SP|노력치|능력포인트|努力値|ステータスポイント)\s*[:：]\s*/i, '').split(/[\/／]/);
+        const mapU = {
+          hp: 'hp', h: 'hp', '체력': 'hp', '体力': 'hp', 'ｈｐ': 'hp',
+          atk: 'atk', a: 'atk', '공격': 'atk', 'こうげき': 'atk', '攻撃': 'atk',
+          def: 'def', b: 'def', '방어': 'def', 'ぼうぎょ': 'def', '防御': 'def',
+          spa: 'spa', c: 'spa', '특공': 'spa', 'とくこう': 'spa', '特攻': 'spa',
+          spd: 'spd', d: 'spd', '특방': 'spd', 'とくぼう': 'spd', '特防': 'spd',
+          spe: 'spe', s: 'spe', '스피드': 'spe', 'すばやさ': 'spe', '素早さ': 'spe'
+        };
         for (const p of parts) {
-          const m = p.trim().match(/^(\d+)\s*(HP|Atk|Def|SpA|SpD|Spe|체력|공격|방어|특공|특방|스피드|H|A|B|C|D|S)$/i);
-          if (m && mapU[m[2].toLowerCase()]) sp[mapU[m[2].toLowerCase()]] = parseInt(m[1], 10);
+          const item = p.trim();
+          const m = item.match(/^(\d+)\s*(HP|Atk|Def|SpA|SpD|Spe|체력|공격|방어|특공|특방|스피드|こうげき|ぼうぎょ|とくこう|とくぼう|すばやさ|体力|攻撃|防御|特攻|特防|素早さ|H|A|B|C|D|S)$/i)
+            || item.match(/^(HP|Atk|Def|SpA|SpD|Spe|체력|공격|방어|특공|특방|스피드|こうげき|ぼうぎょ|とくこう|とくぼう|すばやさ|体力|攻撃|防御|特攻|特防|素早さ|H|A|B|C|D|S)\s*(\d+)$/i);
+          if (!m) continue;
+          const isNumFirst = /^\d+$/.test(m[1]);
+          const val = parseInt(isNumFirst ? m[1] : m[2], 10);
+          const statKey = mapU[(isNumFirst ? m[2] : m[1]).toLowerCase()];
+          if (statKey) sp[statKey] = val;
         }
-      } else if (/Nature$/i.test(line) || /^성격\s*:/i.test(line)) {
-        const nStr = line.replace(/Nature$/i, '').replace(/^성격\s*:\s*/i, '').trim();
+      } else if (/Nature$/i.test(line) || /^(성격|性格|せいかく)\s*[:：]/i.test(line)) {
+        const nStr = line.replace(/Nature$/i, '').replace(/^(성격|性格|せいかく)\s*[:：]\s*/i, '').trim();
         nature = LOOKUP.natures[toEnKey(nStr)] || LOOKUP.natures[toKey(nStr)] || 'Serious';
-      } else if (/^[-*~•]\s*/.test(line)) {
-        const mvRaw = line.replace(/^[-*~•]\s*/, '').trim();
+      } else if (/^[-*~•・]\s*/.test(line)) {
+        const mvRaw = line.replace(/^[-*~•・]\s*/, '').trim();
         if (mvRaw && moves.length < 4) moves.push(LOOKUP.moves[toEnKey(mvRaw)] || LOOKUP.moves[toKey(mvRaw)] || mvRaw);
       }
     }

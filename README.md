@@ -9,8 +9,8 @@
 ## 주요 기능
 
 ### 1. 게임 스샷 자동 인식 (`Ctrl+V` → 쇼다운 · 시트 즉시 반영)
-- Pokémon Champions 인게임 파티 화면의 **`[능력]` 탭**과 **`[스테이터스]` 탭** 스크린샷을 화면 어디서나 **`Ctrl+V`**로 붙여넣거나 드래그 앤 드롭·파일 선택으로 불러올 수 있습니다.
-- 서버 전송이나 API 키 없이 **브라우저 로컬(ONNX Runtime Web WASM + PaddleOCR)**에서 직접 문자를 인식하고, 종족값/Lv.50 공식·성별·타입 색상으로 폼과 능력치(SP `0~32`)/성격을 교차 검증·보정합니다.
+- Pokémon Champions 인게임 파티 화면의 **`[능력]` 탭**과 **`[스테이터스]` 탭** 스크린샷(**한국어 · 일본어 · 영어**)을 화면 어디서나 **`Ctrl+V`**로 붙여넣거나 드래그 앤 드롭·파일 선택으로 불러올 수 있습니다.
+- 서버 전송이나 API 키 없이 **브라우저 로컬(ONNX Runtime Web WASM + PaddleOCR)**에서 직접 문자를 인식하고, 종족값/Lv.50 공식·성별·타입 색상으로 폼과 능력치(SP `0~32`)/성격을 교차 검증·보정합니다. (일본어 UI 선택 시 일본어 OCR이 자동 활성화되며, 모달 내에서도 `KO / EN` ↔ `JP` 전환 가능)
 - `[능력]` 스샷과 `[스테이터스]` 스샷을 순서 상관없이 입력해도 자동으로 저장·병합되어(`localStorage` 유지) **쇼다운 텍스트 변환 및 16:9 시트에 바로 반영**됩니다.
 
 ### 2. 다국어 쇼다운 텍스트 입력 / 복사
@@ -63,7 +63,7 @@
 | `app.js` | 시트 렌더링, 스샷 OCR 연동(`Ctrl+V`/드래그), SP 슬라이더, 네이티브 Canvas 2D 고속 PNG 렌더링(폴백: `html2canvas`) 및 `localStorage` 저장 |
 | `core.js` | Lv.50 6V + SP 실능 계산, 한·일·영 쇼다운 파싱/내보내기, 메가진화 폼 변환 |
 | `pokemon-data.js` | 포켓몬·기술·도구·특성 다국어 데이터셋 및 도구 아이콘 스프라이트 데이터 |
-| `ocr-engine.js` | 스샷 카드/탭 감지, 한글 자모 매칭, Lv.50 SP 교차검증, 쇼다운 변환 클라이언트 |
+| `ocr-engine.js` | 스샷 카드/탭 감지, 한·일·영 퍼지 매칭, Lv.50 SP 교차검증, 쇼다운 변환 클라이언트 |
 | `ocr-worker.js` | ONNX Runtime Web WASM 기반 로컬 PaddleOCR 추론 및 CTC 디코딩 웹 워커 |
 | `models/`, `ort/`, `data/` | PP-OCRv5 인식 모델·사전, ONNX WASM 런타임, 챔피언스 규칙 DB |
 
@@ -77,7 +77,7 @@
 ### 사용 데이터 및 오픈소스 라이브러리
 - **[Pokémon Showdown](https://pokemonshowdown.com/)**: 포켓몬·기술·특성·도구 기본 데이터, 챔피언스 규칙 데이터 및 스프라이트 리소스 참조
 - **[ONNX Runtime Web](https://onnxruntime.ai/)**: 브라우저 로컬 WASM OCR 모델 추론 (`MIT License`)
-- **[PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)**: 한국어/영문 숫자 인식 모델 (`korean_PP-OCRv5_mobile_rec`, `Apache-2.0 License`)
+- **[PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)**: 한국어/영문 숫자 인식 모델 (`korean_PP-OCRv5_mobile_rec`) 및 일본어 인식 모델 (`PP-OCRv5_mobile_rec`, `Apache-2.0 License`)
 - **[PokeAPI](https://pokeapi.co/)**: 다국어 명칭 데이터 및 공식 아트워크 보조
 - **[wsrv.nl](https://wsrv.nl/)**: PNG 이미지 내보내기 시 CORS 대응을 위한 스프라이트 이미지 프록시 (`BSD 3-Clause License`)
 - **[html2canvas](https://html2canvas.hertzen.com/)**: 빈 시트·예외 상황용 폴백 PNG 렌더링 (기본 저장은 HTML5 Canvas 2D 직접 렌더링, `MIT License`)

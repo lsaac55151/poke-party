@@ -28,9 +28,10 @@
 
   function normalizeForMatch(input) {
     return String(input || '')
+      .normalize('NFKC')
       .trim()
       .toLowerCase()
-      .replace(/[\s\-_.'’·:：(),/!?°¶©–—]/g, '');
+      .replace(/[\s\-_.'’·・:：(),/!?°¶©–—]/g, '');
   }
 
   function decomposeHangul(input) {
@@ -91,6 +92,56 @@
     return 0.75 * jamoSim + 0.25 * sylSim;
   }
 
+  const SMALL_TO_LARGE_KANA = {
+    'ぁ': 'あ', 'ぃ': 'い', 'ぅ': 'う', 'ぇ': 'え', 'ぉ': 'お',
+    'っ': 'つ', 'ゃ': 'や', 'ゅ': 'ゆ', 'ょ': 'よ', 'ゎ': 'わ',
+    'ヵ': 'か', 'ヶ': 'け',
+  };
+
+  function kataToHira(input) {
+    let out = '';
+    for (const ch of input) {
+      const code = ch.charCodeAt(0);
+      if (code >= 0x30a1 && code <= 0x30f6) {
+        out += String.fromCharCode(code - 0x60);
+      } else {
+        out += ch;
+      }
+    }
+    return out;
+  }
+
+  function foldJaSmallKana(input) {
+    let out = '';
+    for (const ch of input) {
+      out += SMALL_TO_LARGE_KANA[ch] || ch;
+    }
+    return out;
+  }
+
+  function japaneseSimilarity(a, b) {
+    const na = normalizeForMatch(a);
+    const nb = normalizeForMatch(b);
+    if (!na || !nb) return 0;
+    if (na === nb) return 1;
+
+    const ha = kataToHira(na);
+    const hb = kataToHira(nb);
+    if (ha === hb) return 0.992;
+
+    // PP-OCRv5 mobile occasionally predicts small kana (ょ/っ/ぃ) at full size (よ/つ/い)
+    const fa = foldJaSmallKana(ha);
+    const fb = foldJaSmallKana(hb);
+    if (fa === fb) return 0.985;
+
+    const maxRaw = Math.max(ha.length, hb.length);
+    const rawSim = 1 - levenshtein(ha, hb) / maxRaw;
+    const maxFold = Math.max(fa.length, fb.length);
+    const foldSim = 1 - levenshtein(fa, fb) / maxFold;
+
+    return 0.35 * rawSim + 0.65 * foldSim;
+  }
+
   // =========================================================================
   // 2. Champions Lv.50 Stat Formulas & Cross-Validation Solver
   // =========================================================================
@@ -114,6 +165,124 @@
     spd: 'SpD',
     spe: 'Spe',
   };
+
+  const STAT_LABELS_JA = {
+    hp: 'HP',
+    atk: 'こうげき',
+    def: 'ぼうぎょ',
+    spa: 'とくこう',
+    spd: 'とくぼう',
+    spe: 'すばやさ',
+  };
+
+  function resolveUiLang(optLang) {
+    const raw = optLang || (typeof root !== 'undefined' && root.UI_LANG) || 'ko';
+    const l = String(raw).toLowerCase();
+    if (l.startsWith('ja') || l === 'jp') return 'ja';
+    if (l.startsWith('en')) return 'en';
+    return 'ko';
+  }
+
+  function getOcrStatLabel(key, lang) {
+    if (lang === 'ja') return STAT_LABELS_JA[key] || key;
+    if (lang === 'en') return STAT_SHORT_EN[key] || key;
+    return STAT_LABELS_KO[key] || key;
+  }
+
+  function pickOcrEntryLabel(poolKey, entry, lang) {
+    if (!entry) return '';
+    if (lang === 'en') return entry.name || entry.ko || '';
+    if (lang === 'ja') {
+      if (entry.ja) return entry.ja;
+      const ds = typeof root !== 'undefined' && root.POKEMON_CHAMPS_DATA && root.POKEMON_CHAMPS_DATA[poolKey];
+      const item = ds && ds[entry.id];
+      return (item && item.ja) || entry.name || entry.ko || '';
+    }
+    return entry.ko || entry.name || '';
+  }
+
+  function ocrText(key, vars = {}, optLang) {
+    const lang = resolveUiLang(optLang);
+    const table = {
+      ko: {
+        statMismatch: '{stat} 실수치 불일치 (인식: {obs}, 계산: {calc})',
+        spAdjusted: '{stat} 포인트 보정됨 (인식: {obs} → {calc})',
+        spExceeded: '능력 포인트 합계 초과 ({sum}/66)',
+        spUnder: '능력 포인트 합계 {sum}/66 (66 미만)',
+        statusMissing: '스테이터스 스크린샷 미인식 (능력치/성격 확인 필요)',
+        speciesFail: '포켓몬 이름 인식 실패 ("{raw}")',
+        speciesWarn: '포켓몬 이름 확인 필요 (OCR: "{raw}" → {name})',
+        emptyWord: '공백',
+        abilityFail: '특성 인식 실패 ("{raw}")',
+        abilityWarn: '특성 확인 필요 (OCR: "{raw}" → {name})',
+        itemFail: '도구 인식 실패 ("{raw}")',
+        itemWarn: '도구 확인 필요 (OCR: "{raw}" → {name})',
+        moveFail: '기술 {idx} 인식 실패 ("{raw}")',
+        moveWarn: '기술 {idx} 확인 필요 (OCR: "{raw}" → {name})',
+        abilityMissing: '능력 스크린샷 미인식 (특성/도구/기술 누락)',
+        cannotVerifyNoSpecies: '포켓몬 미인식으로 능력치 검증 불가',
+        fileProtocolErr: '로컬 파일(file://) 환경에서는 브라우저 보안 정책상 스샷 OCR을 실행할 수 없습니다. GitHub Pages 또는 로컬 웹 서버(http://localhost)에서 열어주세요.',
+        dbLoadErr: '챔피언스 DB 로드 실패: HTTP {status}',
+        workerLoadErr: 'OCR Worker 로드 오류',
+        workerUninit: 'OCR Worker가 초기화되지 않았습니다.',
+        imgLoadErr: '이미지를 불러올 수 없습니다.',
+        cardsNotFound: '포켓몬 챔피언스 파티 카드([능력] 또는 [스테이터스] 화면)를 찾지 못했습니다.',
+      },
+      ja: {
+        statMismatch: '{stat} 実数値の不一致 (認識: {obs}, 計算: {calc})',
+        spAdjusted: '{stat} SPを補正しました (認識: {obs} → {calc})',
+        spExceeded: 'SP合計が上限超過です ({sum}/66)',
+        spUnder: 'SP合計 {sum}/66 (66未満)',
+        statusMissing: 'ステータス画面が未認識です（実数値・性格を確認してください）',
+        speciesFail: 'ポケモン名の認識に失敗 ("{raw}")',
+        speciesWarn: 'ポケモン名の要確認 (OCR: "{raw}" → {name})',
+        emptyWord: '空白',
+        abilityFail: 'とくせいの認識に失敗 ("{raw}")',
+        abilityWarn: 'とくせいの要確認 (OCR: "{raw}" → {name})',
+        itemFail: 'もちものの認識に失敗 ("{raw}")',
+        itemWarn: 'もちものの要確認 (OCR: "{raw}" → {name})',
+        moveFail: 'わざ {idx} の認識に失敗 ("{raw}")',
+        moveWarn: 'わざ {idx} の要確認 (OCR: "{raw}" → {name})',
+        abilityMissing: '能力画面が未認識です（とくせい/もちもの/わざ欠落）',
+        cannotVerifyNoSpecies: 'ポケモン未認識のため実数値を検証できません',
+        fileProtocolErr: 'ローカルファイル(file://)環境ではセキュリティ制限によりOCRを実行できません。http://localhost またはGitHub Pagesで開いてください。',
+        dbLoadErr: 'Champions DBの読み込みに失敗: HTTP {status}',
+        workerLoadErr: 'OCR Worker 読み込みエラー',
+        workerUninit: 'OCR Worker が初期化されていません。',
+        imgLoadErr: '画像を読み込めませんでした。',
+        cardsNotFound: 'ポケモンカード（能力またはステータス画面）が見つかりませんでした。',
+      },
+      en: {
+        statMismatch: '{stat} stat mismatch (OCR: {obs}, calc: {calc})',
+        spAdjusted: '{stat} SP adjusted (OCR: {obs} → {calc})',
+        spExceeded: 'Total SP exceeds cap ({sum}/66)',
+        spUnder: 'Total SP {sum}/66 (under 66)',
+        statusMissing: 'Stats screenshot missing (check stats & nature)',
+        speciesFail: 'Failed to recognize Pokémon ("{raw}")',
+        speciesWarn: 'Check Pokémon name (OCR: "{raw}" → {name})',
+        emptyWord: 'blank',
+        abilityFail: 'Failed to recognize ability ("{raw}")',
+        abilityWarn: 'Check ability (OCR: "{raw}" → {name})',
+        itemFail: 'Failed to recognize item ("{raw}")',
+        itemWarn: 'Check item (OCR: "{raw}" → {name})',
+        moveFail: 'Failed to recognize Move {idx} ("{raw}")',
+        moveWarn: 'Check Move {idx} (OCR: "{raw}" → {name})',
+        abilityMissing: 'Ability/Moves screenshot missing',
+        cannotVerifyNoSpecies: 'Cannot verify stats without Pokémon match',
+        fileProtocolErr: 'Screenshot OCR cannot run over file:// due to browser security policies. Open via GitHub Pages or http://localhost.',
+        dbLoadErr: 'Failed to load Champions DB: HTTP {status}',
+        workerLoadErr: 'OCR Worker load error',
+        workerUninit: 'OCR Worker is not initialized.',
+        imgLoadErr: 'Failed to load image.',
+        cardsNotFound: 'Could not detect Pokémon Champions party cards ([Ability] or [Stats] tab).',
+      },
+    };
+    let msg = (table[lang] && table[lang][key]) || table.ko[key] || key;
+    for (const [k, v] of Object.entries(vars)) {
+      msg = msg.replaceAll(`{${k}}`, String(v));
+    }
+    return msg;
+  }
 
   const NATURES = [
     { name: 'Hardy', ko: '노력', plus: null, minus: null },
@@ -185,7 +354,8 @@
     return clamped === 0 ? 0 : 4 + 8 * (clamped - 1);
   }
 
-  function solveChampionsStats(baseStats, rawObs = {}, spObs = {}, arrows = {}) {
+  function solveChampionsStats(baseStats, rawObs = {}, spObs = {}, arrows = {}, uiLang) {
+    const lang = resolveUiLang(uiLang);
     const warnings = [];
     let arrowPlus = null;
     let arrowMinus = null;
@@ -264,19 +434,19 @@
     for (const key of STAT_KEYS) {
       if (typeof rawObs[key] === 'number' && rawObs[key] !== expectedRaw[key]) {
         exactAll = false;
-        warnings.push(`${STAT_LABELS_KO[key]} 실수치 불일치 (인식: ${rawObs[key]}, 계산: ${expectedRaw[key]})`);
+        warnings.push(ocrText('statMismatch', { stat: getOcrStatLabel(key, lang), obs: rawObs[key], calc: expectedRaw[key] }, lang));
       }
       if (typeof spObs[key] === 'number' && spObs[key] !== bestSp[key]) {
         exactAll = false;
-        warnings.push(`${STAT_LABELS_KO[key]} 포인트 보정됨 (인식: ${spObs[key]} → ${bestSp[key]})`);
+        warnings.push(ocrText('spAdjusted', { stat: getOcrStatLabel(key, lang), obs: spObs[key], calc: bestSp[key] }, lang));
       }
     }
 
     if (sumSp > 66) {
       exactAll = false;
-      warnings.push(`능력 포인트 합계 초과 (${sumSp}/66)`);
+      warnings.push(ocrText('spExceeded', { sum: sumSp }, lang));
     } else if (sumSp > 0 && sumSp < 66) {
-      warnings.push(`능력 포인트 합계 ${sumSp}/66 (66 미만)`);
+      warnings.push(ocrText('spUnder', { sum: sumSp }, lang));
     }
 
     const hasAnyStatus =
@@ -284,7 +454,7 @@
       Object.values(spObs).some((v) => typeof v === 'number');
     if (!hasAnyStatus) {
       exactAll = false;
-      warnings.push('스테이터스 스크린샷 미인식 (능력치/성격 확인 필요)');
+      warnings.push(ocrText('statusMissing', {}, lang));
     }
 
     return {
@@ -372,10 +542,11 @@
   }
 
   function bestTextSimilarity(ocr, entry) {
-    if (!ocr) return 0;
+    if (!ocr || !entry) return 0;
     const koSim = koreanSimilarity(ocr, entry.ko);
     const enSim = koreanSimilarity(ocr, entry.name);
-    return Math.max(koSim, enSim);
+    const jaSim = entry.ja ? japaneseSimilarity(ocr, entry.ja) : 0;
+    return Math.max(koSim, enSim, jaSim);
   }
 
   function matchNamedEntry(
@@ -421,10 +592,16 @@
     const scored = [];
 
     for (const sp of allSpecies) {
-      const nameSim = Math.max(
-        koreanSimilarity(ocrText, sp.ko),
-        koreanSimilarity(ocrText, sp.name),
-      );
+      let baseJaSim = 0;
+      if (sp.baseSpecies) {
+        const baseId = sp.baseSpecies.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const baseSp = db.species[baseId];
+        if (baseSp && baseSp.ja) {
+          // Japanese games display regional/form cards by base species name; keep slightly below 1.0 for tie-breaking
+          baseJaSim = japaneseSimilarity(ocrText, baseSp.ja) * 0.999;
+        }
+      }
+      const nameSim = Math.max(bestTextSimilarity(ocrText, sp), baseJaSim);
       if (nameSim >= 0.5) {
         scored.push({ entry: sp, nameSim });
       }
@@ -1128,7 +1305,8 @@
     return overlapping === 0;
   }
 
-  function mergeAndResolveTeam(abilityScreens, statusScreens, db) {
+  function mergeAndResolveTeam(abilityScreens, statusScreens, db, options = {}) {
+    const lang = resolveUiLang(options && options.uiLang);
     const abilityBySlot = new Map();
     for (const screen of abilityScreens || []) {
       if (!screen) continue;
@@ -1173,27 +1351,27 @@
       const warnings = [];
 
       if (!speciesEntry) {
-        warnings.push(`포켓몬 이름 인식 실패 ("${speciesOcr || '공백'}")`);
+        warnings.push(ocrText('speciesFail', { raw: speciesOcr || ocrText('emptyWord', {}, lang) }, lang));
       } else if (spMatch.score < 0.82) {
-        warnings.push(`포켓몬 이름 확인 필요 (OCR: "${speciesOcr}" → ${speciesEntry.ko})`);
+        warnings.push(ocrText('speciesWarn', { raw: speciesOcr, name: pickOcrEntryLabel('dex', speciesEntry, lang) }, lang));
       }
 
       const abilMatch = ab && ab.abilityOcr
         ? matchAbility(ab.abilityOcr, db, speciesEntry)
         : { entry: null, score: 0 };
       if (ab && !abilMatch.entry) {
-        warnings.push(`특성 인식 실패 ("${ab.abilityOcr}")`);
+        warnings.push(ocrText('abilityFail', { raw: ab.abilityOcr }, lang));
       } else if (ab && abilMatch.score < 0.8) {
-        warnings.push(`특성 확인 필요 (OCR: "${ab.abilityOcr}" → ${abilMatch.entry ? abilMatch.entry.ko : ''})`);
+        warnings.push(ocrText('abilityWarn', { raw: ab.abilityOcr, name: pickOcrEntryLabel('abilities', abilMatch.entry, lang) }, lang));
       }
 
       const itemMatch = ab && ab.itemOcr
         ? matchItem(ab.itemOcr, db)
         : { entry: null, score: 0 };
       if (ab && ab.itemOcr && !itemMatch.entry) {
-        warnings.push(`도구 인식 실패 ("${ab.itemOcr}")`);
+        warnings.push(ocrText('itemFail', { raw: ab.itemOcr }, lang));
       } else if (ab && ab.itemOcr && itemMatch.score < 0.78) {
-        warnings.push(`도구 확인 필요 (OCR: "${ab.itemOcr}" → ${itemMatch.entry ? itemMatch.entry.ko : ''})`);
+        warnings.push(ocrText('itemWarn', { raw: ab.itemOcr, name: pickOcrEntryLabel('items', itemMatch.entry, lang) }, lang));
       }
 
       const moves = ((ab && ab.movesOcr) || ['', '', '', '']).map((mvOcr, idx) => {
@@ -1202,11 +1380,11 @@
         }
         const res = matchMove(mvOcr, db, speciesEntry);
         if (!res.entry) {
-          warnings.push(`기술 ${idx + 1} 인식 실패 ("${mvOcr}")`);
+          warnings.push(ocrText('moveFail', { idx: idx + 1, raw: mvOcr }, lang));
           return { id: '', name: '', ko: mvOcr, ocr: mvOcr, score: 0 };
         }
         if (res.score < 0.8) {
-          warnings.push(`기술 ${idx + 1} 확인 필요 (OCR: "${mvOcr}" → ${res.entry.ko})`);
+          warnings.push(ocrText('moveWarn', { idx: idx + 1, raw: mvOcr, name: pickOcrEntryLabel('moves', res.entry, lang) }, lang));
         }
         return {
           id: res.entry.id,
@@ -1218,7 +1396,7 @@
       });
 
       if (!ab) {
-        warnings.push('능력 스크린샷 미인식 (특성/도구/기술 누락)');
+        warnings.push(ocrText('abilityMissing', {}, lang));
       }
 
       let sp = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
@@ -1232,6 +1410,7 @@
           (st && st.rawStats) || {},
           (st && st.spStats) || {},
           (st && st.arrows) || {},
+          lang,
         );
         sp = solved.sp;
         nature = solved.nature;
@@ -1247,7 +1426,7 @@
           spd: st.spStats.spd ?? 0,
           spe: st.spStats.spe ?? 0,
         };
-        warnings.push('포켓몬 미인식으로 능력치 검증 불가');
+        warnings.push(ocrText('cannotVerifyNoSpecies', {}, lang));
       }
 
       const resolvedGender =
@@ -1352,9 +1531,7 @@
 
   function assertHttpContext() {
     if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
-      throw new Error(
-        '로컬 파일(file://) 환경에서는 브라우저 보안 정책상 스샷 OCR을 실행할 수 없습니다. GitHub Pages 또는 로컬 웹 서버(http://localhost)에서 열어주세요.',
-      );
+      throw new Error(ocrText('fileProtocolErr'));
     }
   }
 
@@ -1364,10 +1541,10 @@
     assertHttpContext();
 
     dbPromise = (async () => {
-      if (onProgress) onProgress({ stage: '챔피언스 데이터 불러오는 중...', ratio: 0.08 });
+      if (onProgress) onProgress({ stageKey: 'loading_champions_db', stage: '챔피언스 데이터 불러오는 중...', ratio: 0.08 });
       const url = new URL('data/champions-db.json', ENGINE_BASE_URL).href;
       const res = await fetch(url);
-      if (!res.ok) throw new Error(`챔피언스 DB 로드 실패: HTTP ${res.status}`);
+      if (!res.ok) throw new Error(ocrText('dbLoadErr', { status: res.status }));
       const json = await res.json();
       cachedDb = json;
       return json;
@@ -1381,10 +1558,17 @@
     }
   }
 
+  function resolveOcrModelLang(optLang) {
+    const raw = optLang || (typeof root !== 'undefined' && root.UI_LANG) || 'ko';
+    const l = String(raw).trim().toLowerCase();
+    return (l.startsWith('ja') || l === 'jp') ? 'ja' : 'ko';
+  }
+
   class OcrClient {
     constructor() {
       this.worker = null;
-      this.initPromise = null;
+      this.readyByLang = new Map();
+      this.initWaiters = new Map();
       this.reqCounter = 1;
       this.pending = new Map();
       this.progressListeners = new Set();
@@ -1396,79 +1580,107 @@
       }
     }
 
-    async ensureReady(onProgress) {
-      assertHttpContext();
-      if (onProgress) this.progressListeners.add(onProgress);
-      if (this.initPromise) {
-        try {
-          await this.initPromise;
-          return;
-        } finally {
-          if (onProgress) this.progressListeners.delete(onProgress);
-        }
+    _resetWorker(err) {
+      for (const waiter of this.initWaiters.values()) {
+        waiter.reject(err);
       }
+      for (const req of this.pending.values()) {
+        req.reject(err);
+      }
+      this.initWaiters.clear();
+      this.readyByLang.clear();
+      this.pending.clear();
+      if (this.worker) {
+        try { this.worker.terminate(); } catch (_) {}
+      }
+      this.worker = null;
+    }
 
-      this.initPromise = new Promise((resolve, reject) => {
-        const workerUrl = new URL('ocr-worker.js?v=20261115b', ENGINE_BASE_URL).href;
-        const worker = new Worker(workerUrl, { type: 'module' });
-        this.worker = worker;
+    _ensureWorker() {
+      if (this.worker) return this.worker;
+      const workerUrl = new URL('ocr-worker.js?v=20261115n', ENGINE_BASE_URL).href;
+      const worker = new Worker(workerUrl, { type: 'module' });
+      this.worker = worker;
 
-        worker.onmessage = (event) => {
-          const msg = event.data;
-          if (msg.type === 'progress') {
-            this._notifyProgress({ stage: msg.stage, ratio: msg.ratio });
-          } else if (msg.type === 'ready') {
-            this._notifyProgress({ stage: 'OCR 엔진 준비 완료', ratio: 1 });
-            resolve();
-          } else if (msg.type === 'result') {
+      worker.onmessage = (event) => {
+        const msg = event.data;
+        if (msg.type === 'progress') {
+          this._notifyProgress({ stageKey: msg.stageKey, stage: msg.stage, ratio: msg.ratio });
+        } else if (msg.type === 'ready') {
+          const lang = resolveOcrModelLang(msg.ocrLang || 'ko');
+          this._notifyProgress({ stageKey: 'ocr_engine_ready', stage: 'OCR 엔진 준비 완료', ratio: 1 });
+          const waiter = this.initWaiters.get(lang);
+          if (waiter) {
+            this.initWaiters.delete(lang);
+            waiter.resolve();
+          }
+        } else if (msg.type === 'result') {
+          const item = this.pending.get(msg.requestId);
+          if (item) {
+            this.pending.delete(msg.requestId);
+            item.resolve(msg.results);
+          }
+        } else if (msg.type === 'error') {
+          const err = new Error(msg.message || 'OCR 오류');
+          if (typeof msg.requestId === 'number') {
             const item = this.pending.get(msg.requestId);
             if (item) {
               this.pending.delete(msg.requestId);
-              item.resolve(msg.results);
+              item.reject(err);
             }
-          } else if (msg.type === 'error') {
-            const err = new Error(msg.message || 'OCR 오류');
-            if (typeof msg.requestId === 'number') {
-              const item = this.pending.get(msg.requestId);
-              if (item) {
-                this.pending.delete(msg.requestId);
-                item.reject(err);
-              }
-            } else {
-              this.initPromise = null;
-              this.worker = null;
-              reject(err);
-            }
+          } else if (msg.ocrLang) {
+            const lang = resolveOcrModelLang(msg.ocrLang);
+            const waiter = this.initWaiters.get(lang);
+            this.initWaiters.delete(lang);
+            this.readyByLang.delete(lang);
+            if (waiter) waiter.reject(err);
+          } else {
+            this._resetWorker(err);
           }
-        };
+        }
+      };
 
-        worker.onerror = (e) => {
-          const err = new Error(e.message || 'OCR Worker 로드 오류');
-          this.initPromise = null;
-          this.worker = null;
-          reject(err);
-        };
+      worker.onerror = (e) => {
+        const err = new Error(e.message || ocrText('workerLoadErr'));
+        this._resetWorker(err);
+      };
 
-        worker.postMessage({ type: 'init', baseUrl: ENGINE_BASE_URL });
-      });
+      return worker;
+    }
+
+    async ensureReady(onProgress, ocrLang) {
+      assertHttpContext();
+      const lang = resolveOcrModelLang(ocrLang);
+      if (onProgress) this.progressListeners.add(onProgress);
+
+      let promise = this.readyByLang.get(lang);
+      if (!promise) {
+        const worker = this._ensureWorker();
+        promise = new Promise((resolve, reject) => {
+          this.initWaiters.set(lang, { resolve, reject });
+        });
+        this.readyByLang.set(lang, promise);
+        worker.postMessage({ type: 'init', baseUrl: ENGINE_BASE_URL, ocrLang: lang });
+      }
 
       try {
-        await this.initPromise;
+        await promise;
       } finally {
         if (onProgress) this.progressListeners.delete(onProgress);
       }
     }
 
-    async recognizeCrops(crops, onProgress) {
-      await this.ensureReady(onProgress);
-      if (!this.worker) throw new Error('OCR Worker가 초기화되지 않았습니다.');
+    async recognizeCrops(crops, onProgress, ocrLang) {
+      const lang = resolveOcrModelLang(ocrLang);
+      await this.ensureReady(onProgress, lang);
+      if (!this.worker) throw new Error(ocrText('workerUninit'));
       if (!crops || crops.length === 0) return {};
 
       const requestId = this.reqCounter++;
       return new Promise((resolve, reject) => {
         this.pending.set(requestId, { resolve, reject });
         const transfers = crops.map((c) => c.tensor.buffer);
-        this.worker.postMessage({ type: 'recognize', requestId, crops }, transfers);
+        this.worker.postMessage({ type: 'recognize', requestId, ocrLang: lang, crops }, transfers);
       });
     }
   }
@@ -1492,7 +1704,7 @@
         imgSource = await new Promise((resolve, reject) => {
           const img = new Image();
           img.onload = () => resolve(img);
-          img.onerror = () => reject(new Error('이미지를 불러올 수 없습니다.'));
+          img.onerror = () => reject(new Error(ocrText('imgLoadErr')));
           img.src = url;
         });
         width = imgSource.naturalWidth || imgSource.width;
@@ -1530,18 +1742,19 @@
   async function analyzeAndRecognizeCanvas(canvas, options = {}) {
     const onProgress = options.onProgress;
     const overrideTab = options.overrideTab;
+    const ocrLang = resolveOcrModelLang(options.ocrLang);
     const [db] = await Promise.all([
       loadDb(onProgress),
-      ocrClient.ensureReady(onProgress),
+      ocrClient.ensureReady(onProgress, ocrLang),
     ]);
 
-    if (onProgress) onProgress({ stage: '카드 영역 감지 및 문자 인식 중...', ratio: 0.9 });
+    if (onProgress) onProgress({ stageKey: 'ocr_recognizing', stage: '카드 영역 감지 및 문자 인식 중...', ratio: 0.9 });
     const analyzed = analyzeScreenCanvas(canvas, overrideTab);
     if (!analyzed.cards.length) {
-      throw new Error('포켓몬 챔피언스 파티 카드([능력] 또는 [스테이터스] 화면)를 찾지 못했습니다.');
+      throw new Error(ocrText('cardsNotFound'));
     }
 
-    const ocrMap = await ocrClient.recognizeCrops(analyzed.crops, onProgress);
+    const ocrMap = await ocrClient.recognizeCrops(analyzed.crops, onProgress, ocrLang);
     const extracted = extractRawCards(analyzed, ocrMap);
 
     return {
@@ -1563,6 +1776,8 @@
     decomposeHangul,
     levenshtein,
     koreanSimilarity,
+    japaneseSimilarity,
+    resolveOcrModelLang,
     getNatureByName,
     findNatureByArrows,
     calcChampionsStat,
