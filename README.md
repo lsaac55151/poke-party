@@ -37,10 +37,11 @@
   - `메가진화 폼 표시` / `기본 폼 표시`
   - 상단 배너(`파티명` / `설명`) 표시 On/Off
 
-### 5. 브라우저 자동 저장 · 전체화면 · 16:9 PNG 저장
+### 5. 브라우저 자동 저장 · 모바일 반응형 · 전체화면 · 16:9 PNG 저장
 - 첫 방문 시에는 빈 상태로 시작하며, 입력한 파티·스샷 인식 내역(`[능력]`/`[스테이터스]`)·배너 문구·테마/언어 등 설정은 브라우저 `localStorage`에 자동 저장되어 **새로고침 후에도 초기화되지 않고 그대로 유지**됩니다.
+- **모바일 편집 최적화**: 모바일 화면에서는 편집 시 카드가 가로 1열 세로 스크롤 레이아웃으로 자동 전환됩니다.
 - **전체화면 (`F`)** 모드로 시트 전체를 깔끔하게 확인할 수 있습니다.
-- **`16:9 이미지 저장 (PNG)`** 버튼으로 고정 `16:9` 비율의 고선명 PNG 이미지를 다운로드합니다.
+- **`16:9 이미지 저장 (PNG)`** 버튼으로 데스크톱·모바일 모두 동일한 고해상도(`2880×1620`, 고정 `16:9` 비율) PNG 이미지를 빠르게 다운로드합니다.
 
 ---
 
@@ -58,8 +59,8 @@
 | 파일 | 설명 |
 | :--- | :--- |
 | `index.html` | 메인 레이아웃, 상단 컨트롤 바, 스샷 OCR · 쇼다운 입력 및 개별 편집 모달 |
-| `styles.css` | 테마 스타일, 카드 그리드, OCR 모달, 반응형 레이아웃 및 PNG 내보내기 스타일 |
-| `app.js` | 시트 렌더링, 스샷 OCR 연동(`Ctrl+V`/드래그), SP 슬라이더, PNG 캡처 및 `localStorage` 저장 |
+| `styles.css` | 테마 스타일, 카드 그리드, OCR 모달, 모바일 1열 반응형 및 PNG 내보내기 스타일 |
+| `app.js` | 시트 렌더링, 스샷 OCR 연동(`Ctrl+V`/드래그), SP 슬라이더, 네이티브 Canvas 2D 고속 PNG 렌더링(폴백: `html2canvas`) 및 `localStorage` 저장 |
 | `core.js` | Lv.50 6V + SP 실능 계산, 한·일·영 쇼다운 파싱/내보내기, 메가진화 폼 변환 |
 | `pokemon-data.js` | 포켓몬·기술·도구·특성 다국어 데이터셋 및 도구 아이콘 스프라이트 데이터 |
 | `ocr-engine.js` | 스샷 카드/탭 감지, 한글 자모 매칭, Lv.50 SP 교차검증, 쇼다운 변환 클라이언트 |
@@ -76,7 +77,8 @@
 ### 사용 데이터 및 오픈소스 라이브러리
 - **[Pokémon Showdown](https://pokemonshowdown.com/)**: 포켓몬·기술·특성·도구 기본 데이터, 챔피언스 규칙 데이터 및 스프라이트 리소스 참조
 - **[ONNX Runtime Web](https://onnxruntime.ai/)**: 브라우저 로컬 WASM OCR 모델 추론 (`MIT License`)
-- **[PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)**: 한국어/영문 숫자 인식 모델 (`korean_PP-OCRv5_mobile_rec`)
+- **[PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)**: 한국어/영문 숫자 인식 모델 (`korean_PP-OCRv5_mobile_rec`, `Apache-2.0 License`)
 - **[PokeAPI](https://pokeapi.co/)**: 다국어 명칭 데이터 및 공식 아트워크 보조
-- **[html2canvas](https://html2canvas.hertzen.com/)**: 클라이언트 측 PNG 이미지 렌더링 (`MIT License`)
+- **[wsrv.nl](https://wsrv.nl/)**: PNG 이미지 내보내기 시 CORS 대응을 위한 스프라이트 이미지 프록시 (`BSD 3-Clause License`)
+- **[html2canvas](https://html2canvas.hertzen.com/)**: 빈 시트·예외 상황용 폴백 PNG 렌더링 (기본 저장은 HTML5 Canvas 2D 직접 렌더링, `MIT License`)
 - **[Google Fonts](https://fonts.google.com/)**: `JetBrains Mono`, `Noto Sans KR`, `Noto Sans JP`
