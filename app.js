@@ -303,14 +303,28 @@ function autoFitSheetTexts() {
   const sheet = document.getElementById('sheet16x9');
   if (!sheet) return;
 
-  // 0. Fit Banner Title & Subtitle
-  ['viewTitle', 'viewSubtitle'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el || !el.parentElement) return;
+  // Batch-clear inline overrides once before measuring to prevent interleaved write-read layout thrashing
+  const viewTitle = document.getElementById('viewTitle');
+  const viewSubtitle = document.getElementById('viewSubtitle');
+  if (viewTitle) viewTitle.style.fontSize = '';
+  if (viewSubtitle) viewSubtitle.style.fontSize = '';
+  sheet.querySelectorAll('.p-name, .p-sub-en, .ib-val-txt, .nat-mod-inline, .mv-name, .st-lbl').forEach(el => {
     el.style.fontSize = '';
+  });
+
+  // 0. Fit Banner Title & Subtitle
+  [viewTitle, viewSubtitle].forEach(el => {
+    if (!el || !el.parentElement) return;
     const maxW = el.parentElement.clientWidth - 20;
     if (maxW <= 0) return;
+    let curW = el.offsetWidth;
+    if (curW <= maxW) return;
     let size = parseFloat(window.getComputedStyle(el).fontSize) || 24;
+    if (curW - maxW > 10 && size > 15) {
+      size = Math.max(13, Math.floor(size * (maxW / curW) * 2) / 2);
+      el.style.fontSize = `${size}px`;
+      curW = el.offsetWidth;
+    }
     while (el.offsetWidth > maxW && size > 13) {
       size -= 0.5;
       el.style.fontSize = `${size}px`;
@@ -322,20 +336,29 @@ function autoFitSheetTexts() {
     const pName = group.querySelector('.p-name');
     const pSub = group.querySelector('.p-sub-en');
     if (!pName) return;
-    pName.style.fontSize = '';
-    if (pSub) pSub.style.fontSize = '';
 
     const availW = group.clientWidth - 6;
     if (availW <= 0) return;
 
-    const calcTotalW = () => {
-      const children = Array.from(group.children);
-      const sum = children.reduce((acc, ch) => acc + ch.offsetWidth, 0);
-      return sum + Math.max(0, children.length - 1) * 6;
-    };
+    const children = Array.from(group.children);
+    const gapSum = Math.max(0, children.length - 1) * 6;
+    const calcTotalW = () => children.reduce((acc, ch) => acc + ch.offsetWidth, 0) + gapSum;
+
+    const initialW = calcTotalW();
+    if (initialW <= availW) return;
 
     let size = parseFloat(window.getComputedStyle(pName).fontSize) || 35;
     let subSize = pSub ? (parseFloat(window.getComputedStyle(pSub).fontSize) || 17) : 0;
+    if (initialW - availW > 12 && size > 15) {
+      const jumped = Math.max(13, Math.floor(size * (availW / initialW) * 2) / 2);
+      const stepDelta = Math.max(0, (size - jumped) * 0.5);
+      size = jumped;
+      pName.style.fontSize = `${size}px`;
+      if (pSub && subSize > 11) {
+        subSize = Math.max(11, subSize - stepDelta);
+        pSub.style.fontSize = `${subSize}px`;
+      }
+    }
     while (calcTotalW() > availW && size > 13) {
       size -= 0.5;
       pName.style.fontSize = `${size}px`;
@@ -351,20 +374,19 @@ function autoFitSheetTexts() {
     const txtEl = ibVal.querySelector('.ib-val-txt');
     const modEl = ibVal.querySelector('.nat-mod-inline');
     if (!txtEl) return;
-    txtEl.style.fontSize = '';
-    if (modEl) modEl.style.fontSize = '';
 
     const availW = ibVal.clientWidth - 6;
     if (availW <= 0) return;
 
-    const calcTotalW = () => {
-      const children = Array.from(ibVal.children);
-      const sum = children.reduce((acc, ch) => {
-        if (ch.classList.contains('item-icon')) return acc + (ch.offsetWidth || 36);
-        return acc + ch.offsetWidth;
-      }, 0);
-      return sum + Math.max(0, children.length - 1) * 5;
-    };
+    const children = Array.from(ibVal.children);
+    const gapSum = Math.max(0, children.length - 1) * 5;
+    const calcTotalW = () => children.reduce((acc, ch) => {
+      if (ch.classList.contains('item-icon')) return acc + (ch.offsetWidth || 36);
+      return acc + ch.offsetWidth;
+    }, 0) + gapSum;
+
+    const initialW = calcTotalW();
+    if (initialW <= availW) return;
 
     let size = parseFloat(window.getComputedStyle(txtEl).fontSize) || 24;
     let modSize = modEl ? (parseFloat(window.getComputedStyle(modEl).fontSize) || 15.5) : 0;
@@ -383,17 +405,21 @@ function autoFitSheetTexts() {
     const mvName = mvLeft.querySelector('.mv-name');
     const mvType = mvLeft.querySelector('.mv-type-sq');
     if (!mvName) return;
-    mvName.style.fontSize = '';
 
     const availW = mvLeft.clientWidth - 6;
     if (availW <= 0) return;
 
-    const calcTotalW = () => {
-      const typeW = mvType ? mvType.offsetWidth + 7 : 0;
-      return typeW + mvName.offsetWidth;
-    };
+    const typeW = mvType ? mvType.offsetWidth + 7 : 0;
+    const calcTotalW = () => typeW + mvName.offsetWidth;
+    const initialW = calcTotalW();
+    if (initialW <= availW) return;
 
     let size = parseFloat(window.getComputedStyle(mvName).fontSize) || 26;
+    if (initialW - availW > 12 && size > 14) {
+      const targetTextW = Math.max(24, availW - typeW);
+      size = Math.max(12, Math.floor(size * (targetTextW / Math.max(1, mvName.offsetWidth)) * 2) / 2);
+      mvName.style.fontSize = `${size}px`;
+    }
     while (calcTotalW() > availW && size > 12) {
       size -= 0.5;
       mvName.style.fontSize = `${size}px`;
@@ -404,9 +430,9 @@ function autoFitSheetTexts() {
   sheet.querySelectorAll('.stat-box').forEach(box => {
     const lbl = box.querySelector('.st-lbl');
     if (!lbl) return;
-    lbl.style.fontSize = '';
     const availW = box.clientWidth - 6;
     if (availW <= 0) return;
+    if (lbl.offsetWidth <= availW) return;
     let size = parseFloat(window.getComputedStyle(lbl).fontSize) || 17.5;
     while (lbl.offsetWidth > availW && size > 11) {
       size -= 0.5;
@@ -546,15 +572,380 @@ async function inlineImagesForCapture(rootEl) {
   return () => restoreCallbacks.forEach(fn => fn());
 }
 
-// Fast 16:9 PNG Image Saver
-async function download16x9Image() {
-  if (isSavingImage) return;
-  if (typeof html2canvas === 'undefined') {
-    showToast('이미지 저장 모듈을 불러오는 중입니다. 잠시 후 다시 시도해주세요.');
+function traceRoundRect(ctx, x, y, w, h, r) {
+  const cr = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, cr);
     return;
   }
+  ctx.moveTo(x + cr, y);
+  ctx.lineTo(x + w - cr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + cr);
+  ctx.lineTo(x + w, y + h - cr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - cr, y + h);
+  ctx.lineTo(x + cr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - cr);
+  ctx.lineTo(x, y + cr);
+  ctx.quadraticCurveTo(x, y, x + cr, y);
+  ctx.closePath();
+}
+
+function drawRoundedBox(ctx, x, y, w, h, r, fill, stroke, lineW) {
+  if (w <= 0 || h <= 0) return;
+  traceRoundRect(ctx, x, y, w, h, r);
+  if (fill) {
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+  if (stroke && lineW > 0) {
+    ctx.lineWidth = lineW;
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
+  }
+}
+
+async function waitForVisibleSprites(sheet, timeoutMs = 1500) {
+  const imgs = Array.from(sheet.querySelectorAll('img.poke-img'));
+  const pending = imgs.filter(img => img.getAttribute('src') && !img.complete);
+  if (!pending.length) return;
+  await Promise.race([
+    Promise.all(pending.map(img => new Promise(resolve => {
+      const done = () => { img.removeEventListener('load', done); img.removeEventListener('error', done); resolve(); };
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+    }))),
+    new Promise(resolve => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
+// Hardware-accelerated native Canvas 2D renderer using exact computed 1920x1080 DOM coordinates
+function renderSheetToCanvasNative(sheet, scale = 1.5) {
+  const W = 1920;
+  const H = 1080;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(W * scale);
+  canvas.height = Math.round(H * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+
+  const bodyCs = getComputedStyle(document.body);
+  const token = (name) => bodyCs.getPropertyValue(name).trim();
+  const bg1 = token('--canvas-bg');
+  const bg2 = token('--canvas-bg-2');
+  const patCol = token('--canvas-pattern');
+
+  // Diagonal 115deg two-tone canvas backdrop
+  const angleRad = (115 - 90) * Math.PI / 180;
+  const dx = Math.cos(angleRad);
+  const dy = Math.sin(angleRad);
+  const cx = W / 2;
+  const cy = H / 2;
+  const span = Math.abs(W * dx) + Math.abs(H * dy);
+  const bgGrad = ctx.createLinearGradient(cx - dx * span / 2, cy - dy * span / 2, cx + dx * span / 2, cy + dy * span / 2);
+  bgGrad.addColorStop(0, bg1);
+  bgGrad.addColorStop(0.62, bg1);
+  bgGrad.addColorStop(0.621, bg2);
+  bgGrad.addColorStop(1, bg2);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Repeating 96x166 geometric lattice overlay
+  if (patCol) {
+    const tile = document.createElement('canvas');
+    tile.width = 96;
+    tile.height = 166;
+    const tctx = tile.getContext('2d');
+    tctx.fillStyle = patCol;
+    tctx.beginPath();
+    tctx.moveTo(0, 0); tctx.lineTo(96, 0); tctx.lineTo(48, 83); tctx.closePath();
+    tctx.fill();
+    tctx.beginPath();
+    tctx.moveTo(0, 166); tctx.lineTo(96, 166); tctx.lineTo(48, 83); tctx.closePath();
+    tctx.fill();
+    const pattern = ctx.createPattern(tile, 'repeat');
+    if (pattern) {
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  }
+
+  const sheetRect = sheet.getBoundingClientRect();
+  const rel = (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left - sheetRect.left, y: r.top - sheetRect.top, w: r.width, h: r.height };
+  };
+  const rad = (cs) => parseFloat(cs.borderTopLeftRadius) || 0;
+
+  function fillCssGradientOrColor(x, y, w, h, radius, cs) {
+    const bgImg = cs.backgroundImage;
+    if (bgImg && bgImg.startsWith('linear-gradient')) {
+      const cols = bgImg.match(/rgba?\([^)]+\)|#[0-9a-fA-F]{3,8}/g);
+      if (cols && cols.length >= 2) {
+        const lg = ctx.createLinearGradient(x, y, x, y + h);
+        lg.addColorStop(0, cols[0]);
+        lg.addColorStop(1, cols[cols.length - 1]);
+        drawRoundedBox(ctx, x, y, w, h, radius, lg, cs.borderTopColor, parseFloat(cs.borderTopWidth) || 0);
+        return;
+      }
+    }
+    drawRoundedBox(ctx, x, y, w, h, radius, cs.backgroundColor, cs.borderTopColor, parseFloat(cs.borderTopWidth) || 0);
+  }
+
+  const range = document.createRange();
+  const hasLetterSpacing = 'letterSpacing' in ctx;
+  function drawTextNodes(rootEl, shadowCol = null, shadowBlur = 0, shadowOffY = 0) {
+    const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const raw = node.nodeValue;
+      if (!raw || !raw.trim()) continue;
+      const parent = node.parentElement;
+      if (!parent) continue;
+      const cs = getComputedStyle(parent);
+      if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+      range.selectNodeContents(node);
+      const rects = range.getClientRects();
+      if (!rects.length) continue;
+      const r = rects[0];
+      const tx = r.left - sheetRect.left;
+      const ty = r.top - sheetRect.top + r.height / 2;
+      ctx.save();
+      ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      if (hasLetterSpacing && cs.letterSpacing && cs.letterSpacing !== 'normal') {
+        ctx.letterSpacing = cs.letterSpacing;
+      }
+      ctx.fillStyle = cs.color;
+      ctx.globalAlpha = parseFloat(cs.opacity || 1);
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      if (shadowCol) {
+        ctx.shadowColor = shadowCol;
+        ctx.shadowBlur = shadowBlur;
+        ctx.shadowOffsetY = shadowOffY;
+      }
+      ctx.fillText(raw.trim(), tx, ty);
+      ctx.restore();
+    }
+  }
+
+  // Banner
+  const bannerBar = sheet.querySelector('.banner-bar');
+  if (bannerBar && !sheet.classList.contains('hide-banner')) {
+    const br = rel(bannerBar);
+    const bcs = getComputedStyle(bannerBar);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.28)';
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 8;
+    drawRoundedBox(ctx, br.x, br.y, br.w, br.h, rad(bcs), bcs.backgroundColor, bcs.borderTopColor, parseFloat(bcs.borderTopWidth) || 0);
+    ctx.restore();
+
+    ctx.save();
+    traceRoundRect(ctx, br.x, br.y, br.w, br.h, rad(bcs));
+    ctx.clip();
+    const div = bannerBar.querySelector('.banner-center-divider');
+    if (div) {
+      const dr = rel(div);
+      const cxD = dr.x + dr.w / 2;
+      const cyD = dr.y + dr.h / 2;
+      ctx.save();
+      ctx.translate(cxD, cyD);
+      ctx.transform(1, 0, Math.tan(-18 * Math.PI / 180), 1, 0, 0);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fillRect(-28, -30, 56, 60);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-28, -30); ctx.lineTo(-28, 30);
+      ctx.moveTo(28, -30); ctx.lineTo(28, 30);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(cxD, cyD);
+      ctx.beginPath(); ctx.arc(0, 0, 14, Math.PI, 0); ctx.closePath(); ctx.fillStyle = '#EF4444'; ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI); ctx.closePath(); ctx.fillStyle = '#F8FAFC'; ctx.fill();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(-14, -1.2, 28, 2.4);
+      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fillStyle = '#FFFFFF'; ctx.fill();
+      ctx.strokeStyle = '#1E293B'; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.restore();
+    }
+    const bTitle = bannerBar.querySelector('.banner-title');
+    const bSub = bannerBar.querySelector('.banner-sub');
+    if (bTitle) drawTextNodes(bTitle, 'rgba(0, 0, 0, 0.35)', 4, 2);
+    if (bSub) drawTextNodes(bSub, 'rgba(0, 0, 0, 0.35)', 4, 2);
+    ctx.restore();
+  }
+
+  // Cards
+  sheet.querySelectorAll('.poke-card').forEach(card => {
+    const cr = rel(card);
+    const ccs = getComputedStyle(card);
+    const cardRadius = rad(ccs);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.28)';
+    ctx.shadowBlur = 20;
+    ctx.shadowOffsetY = 8;
+    fillCssGradientOrColor(cr.x, cr.y, cr.w, cr.h, cardRadius, ccs);
+    ctx.restore();
+
+    ctx.save();
+    traceRoundRect(ctx, cr.x, cr.y, cr.w, cr.h, cardRadius);
+    ctx.clip();
+
+    const wm = card.querySelector('.card-watermark');
+    if (wm) drawTextNodes(wm);
+
+    const tb = card.querySelector('.card-topbar');
+    if (tb) {
+      const tbr = rel(tb);
+      const tbcs = getComputedStyle(tb);
+      ctx.fillStyle = tbcs.backgroundColor;
+      ctx.fillRect(tbr.x, tbr.y, tbr.w, tbr.h);
+      ctx.fillStyle = tbcs.borderBottomColor;
+      ctx.fillRect(tbr.x, tbr.y + tbr.h - 1.5, tbr.w, 1.5);
+    }
+
+    const leftCol = card.querySelector('.card-left-col');
+    if (leftCol) {
+      const lr = rel(leftCol);
+      const lcs = getComputedStyle(leftCol);
+      ctx.fillStyle = lcs.borderRightColor;
+      ctx.fillRect(lr.x + lr.w - 1.5, lr.y, 1.5, lr.h);
+    }
+
+    const footer = card.querySelector('.card-stats-footer');
+    const showFooter = footer && getComputedStyle(footer).display !== 'none';
+    if (showFooter) {
+      const fr = rel(footer);
+      const fcs = getComputedStyle(footer);
+      ctx.fillStyle = fcs.backgroundColor;
+      ctx.fillRect(fr.x, fr.y, fr.w, fr.h);
+      ctx.fillStyle = fcs.borderTopColor;
+      ctx.fillRect(fr.x, fr.y, fr.w, 2);
+    }
+
+    card.querySelectorAll('.gender-circle, .mega-btn, .type-chip').forEach(el => {
+      const er = rel(el);
+      const ecs = getComputedStyle(el);
+      drawRoundedBox(ctx, er.x, er.y, er.w, er.h, rad(ecs), ecs.backgroundColor, ecs.borderTopColor, parseFloat(ecs.borderTopWidth) || 0);
+      drawTextNodes(el, 'rgba(0, 0, 0, 0.45)', 3, 1);
+    });
+    if (tb) {
+      const pName = tb.querySelector('.p-name');
+      const pSub = tb.querySelector('.p-sub-en');
+      if (pName) drawTextNodes(pName, 'rgba(0, 0, 0, 0.45)', 4, 2);
+      if (pSub) drawTextNodes(pSub);
+    }
+
+    card.querySelectorAll('.info-block').forEach(ib => {
+      const ibr = rel(ib);
+      const ibcs = getComputedStyle(ib);
+      drawRoundedBox(ctx, ibr.x, ibr.y, ibr.w, ibr.h, rad(ibcs), ibcs.backgroundColor, ibcs.borderTopColor, parseFloat(ibcs.borderTopWidth) || 0);
+    });
+    card.querySelectorAll('.ib-tag, .nat-mod-inline').forEach(el => {
+      const er = rel(el);
+      const ecs = getComputedStyle(el);
+      drawRoundedBox(ctx, er.x, er.y, er.w, er.h, rad(ecs), ecs.backgroundColor, null, 0);
+      drawTextNodes(el);
+    });
+    card.querySelectorAll('.ib-val').forEach(el => {
+      const txt = el.querySelector('.ib-val-txt');
+      if (txt) drawTextNodes(txt, 'rgba(0, 0, 0, 0.38)', 4, 2);
+      const icon = el.querySelector('img.item-icon');
+      if (icon && icon.complete && icon.naturalWidth > 0) {
+        const ir = rel(icon);
+        ctx.drawImage(icon, ir.x, ir.y, ir.w, ir.h);
+      }
+    });
+
+    card.querySelectorAll('.move-row').forEach(mr => {
+      const mrr = rel(mr);
+      const mrcs = getComputedStyle(mr);
+      if (parseFloat(mrcs.borderBottomWidth) > 0) {
+        ctx.fillStyle = mrcs.borderBottomColor;
+        ctx.fillRect(mrr.x, mrr.y + mrr.h - 1.5, mrr.w, 1.5);
+      }
+      const sq = mr.querySelector('.mv-type-sq');
+      if (sq) {
+        const sr = rel(sq);
+        const scs = getComputedStyle(sq);
+        drawRoundedBox(ctx, sr.x, sr.y, sr.w, sr.h, rad(scs), scs.backgroundColor, scs.borderTopColor, parseFloat(scs.borderTopWidth) || 0);
+        drawTextNodes(sq, 'rgba(0, 0, 0, 0.45)', 3, 1);
+      }
+      const mvName = mr.querySelector('.mv-name');
+      if (mvName) drawTextNodes(mvName, 'rgba(0, 0, 0, 0.4)', 4, 2);
+      const cat = mr.querySelector('.mv-cat');
+      if (cat) {
+        const catr = rel(cat);
+        const catcs = getComputedStyle(cat);
+        drawRoundedBox(ctx, catr.x, catr.y, catr.w, catr.h, rad(catcs), catcs.backgroundColor, catcs.borderTopColor, parseFloat(catcs.borderTopWidth) || 0);
+        drawTextNodes(cat);
+      }
+    });
+
+    if (showFooter) {
+      footer.querySelectorAll('.stat-box').forEach(sb => {
+        const sr = rel(sb);
+        const scs = getComputedStyle(sb);
+        drawRoundedBox(ctx, sr.x, sr.y, sr.w, sr.h, rad(scs), scs.backgroundColor, scs.borderTopColor, parseFloat(scs.borderTopWidth) || 0);
+        const pill = sb.querySelector('.st-sp-pill');
+        if (pill) {
+          const pr = rel(pill);
+          const pcs = getComputedStyle(pill);
+          drawRoundedBox(ctx, pr.x, pr.y, pr.w, pr.h, rad(pcs), pcs.backgroundColor, null, 0);
+          drawTextNodes(pill);
+        }
+        const lbl = sb.querySelector('.st-lbl');
+        const num = sb.querySelector('.st-num');
+        if (lbl) drawTextNodes(lbl);
+        if (num) drawTextNodes(num, 'rgba(0, 0, 0, 0.45)', 4, 2);
+      });
+    }
+
+    const img = card.querySelector('img.poke-img');
+    if (img && img.complete && img.naturalWidth > 0) {
+      const ir = rel(img);
+      const ratio = Math.min(ir.w / img.naturalWidth, ir.h / img.naturalHeight);
+      const dw = img.naturalWidth * ratio;
+      const dh = img.naturalHeight * ratio;
+      const dx = ir.x + (ir.w - dw) / 2;
+      const dy = ir.y + (ir.h - dh) / 2;
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 6;
+      ctx.drawImage(img, dx, dy, dw, dh);
+      ctx.restore();
+    }
+
+    drawRoundedBox(ctx, cr.x, cr.y, cr.w, cr.h, cardRadius, null, ccs.borderTopColor, parseFloat(ccs.borderTopWidth) || 0);
+    ctx.restore();
+  });
+
+  return canvas;
+}
+
+// Fast 16:9 PNG Image Saver (Native Canvas 2D with html2canvas safety fallback)
+async function download16x9Image() {
+  if (isSavingImage) return;
   isSavingImage = true;
+
+  const saveBtn = document.querySelector('.topbar-right .btn-primary-cta');
+  const prevBtnText = saveBtn ? saveBtn.textContent : '';
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = '저장 중...';
+  }
   showToast('16:9 PNG 이미지를 저장 중입니다...');
+
   const scaler = document.getElementById('stageScaler');
   const sheet = document.getElementById('sheet16x9');
   const prevTransform = scaler.style.transform;
@@ -563,12 +954,15 @@ async function download16x9Image() {
   const prevTop = scaler.style.top;
   const prevZ = scaler.style.zIndex;
   let restoreImgs = null;
+  let detachedDatalists = [];
   let layoutRestored = false;
 
   const restoreLayout = () => {
     if (layoutRestored) return;
     layoutRestored = true;
     if (restoreImgs) restoreImgs();
+    detachedDatalists.forEach(({ dl, parent, next }) => parent.insertBefore(dl, next));
+    detachedDatalists = [];
     scaler.style.position = prevPos;
     scaler.style.left = prevLeft;
     scaler.style.top = prevTop;
@@ -578,7 +972,11 @@ async function download16x9Image() {
   };
 
   try {
-    restoreImgs = await inlineImagesForCapture(sheet);
+    // Let browser paint immediate button & toast feedback before layout switch
+    await new Promise(resolve => requestAnimationFrame(resolve));
+
+    const isCompactViewport = window.innerWidth <= 768;
+    const exportScale = isCompactViewport ? 1 : 1.5;
 
     document.body.classList.remove('mobile-edit-flow');
     sheet.classList.remove('mobile-card-flow');
@@ -596,57 +994,102 @@ async function download16x9Image() {
 
     autoFitSheetTexts();
 
-    const canvas = await html2canvas(sheet, {
-      width: 1920,
-      height: 1080,
-      windowWidth: 1920,
-      windowHeight: 1080,
-      x: 0,
-      y: 0,
-      scrollX: 0,
-      scrollY: 0,
-      scale: 1.5,
-      logging: false,
-      imageTimeout: 4000,
-      useCORS: true,
-      allowTaint: false,
-      backgroundColor: null,
-      ignoreElements: (el) => {
-        if (!el || !el.tagName) return false;
-        if (el.tagName === 'DATALIST' || el.tagName === 'SCRIPT') return true;
-        const cl = el.classList;
-        return Boolean(cl && (cl.contains('topbar') || cl.contains('subbar') || cl.contains('modal-backdrop') || cl.contains('toast') || cl.contains('exit-fs-btn')));
-      },
-      onclone: (clonedDoc) => {
-        const clonedSheet = clonedDoc.getElementById('sheet16x9');
-        if (!clonedSheet) return;
+    let blob = null;
+    let fallbackCanvas = null;
 
-        // Wrap inner text of badges/pills so shifting text up does not shift the badge border/background
-        clonedSheet.querySelectorAll('.type-chip, .mv-type-sq, .mega-btn, .gender-circle, .ib-tag, .nat-mod-inline, .mv-cat, .st-sp-pill').forEach(el => {
-          el.innerHTML = `<span class="h2c-badge-txt">${el.innerHTML}</span>`;
+    if (currentParty.length && !lastErrorMsg) {
+      await waitForVisibleSprites(sheet, 1500);
+      try {
+        const nativeCanvas = renderSheetToCanvasNative(sheet, exportScale);
+        restoreLayout();
+        blob = await new Promise((resolve, reject) => {
+          try {
+            nativeCanvas.toBlob(b => (b ? resolve(b) : reject(new Error('empty_blob'))), 'image/png');
+          } catch (e) {
+            reject(e);
+          }
         });
-
-        const fixStyle = clonedDoc.createElement('style');
-        fixStyle.textContent = `
-          .banner-title { position: relative !important; top: -6px !important; }
-          .banner-sub { position: relative !important; top: -5px !important; }
-          .p-name { position: relative !important; top: -6px !important; }
-          .p-sub-en { position: relative !important; top: -3px !important; }
-          .ib-val-txt { position: relative !important; top: -4.5px !important; }
-          .mv-name { position: relative !important; top: -5px !important; }
-          .st-lbl { position: relative !important; top: -3px !important; }
-          .st-num { position: relative !important; top: -3.5px !important; }
-          .h2c-badge-txt { position: relative !important; top: -3px !important; display: inline-flex !important; align-items: center !important; gap: 3px !important; }
-        `;
-        clonedDoc.head.appendChild(fixStyle);
+      } catch (_) {
+        blob = null;
       }
-    });
+    }
 
-    // Immediately restore edit layout before PNG encoding
-    restoreLayout();
+    if (!blob) {
+      if (typeof html2canvas === 'undefined') {
+        throw new Error('IMAGE_SAVER_UNAVAILABLE');
+      }
+      // Restore 1920x1080 stage cleanly if native path already called restoreLayout()
+      if (layoutRestored) {
+        layoutRestored = false;
+        document.body.classList.remove('mobile-edit-flow');
+        sheet.classList.remove('mobile-card-flow');
+        sheet.classList.remove('is-wide-edit');
+        scaler.style.position = 'fixed';
+        scaler.style.left = '0px';
+        scaler.style.top = '0px';
+        scaler.style.zIndex = '-9999';
+        scaler.style.transform = 'none';
+        scaler.style.width = '1920px';
+        scaler.style.height = '1080px';
+        sheet.style.width = '1920px';
+        sheet.style.height = '1080px';
+        autoFitSheetTexts();
+      }
+      // Temporarily detach large datalist option lists so html2canvas doesn't clone 3000+ unused nodes
+      document.querySelectorAll('datalist').forEach(dl => {
+        if (dl.parentNode && dl.childElementCount) {
+          detachedDatalists.push({ dl, parent: dl.parentNode, next: dl.nextSibling });
+          dl.remove();
+        }
+      });
+      restoreImgs = await inlineImagesForCapture(sheet);
+      fallbackCanvas = await html2canvas(sheet, {
+        width: 1920,
+        height: 1080,
+        windowWidth: 1920,
+        windowHeight: 1080,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
+        scale: exportScale,
+        logging: false,
+        imageTimeout: 4000,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: null,
+        ignoreElements: (el) => {
+          if (!el || !el.tagName) return false;
+          if (el.tagName === 'DATALIST' || el.tagName === 'SCRIPT') return true;
+          const cl = el.classList;
+          return Boolean(cl && (cl.contains('topbar') || cl.contains('subbar') || cl.contains('modal-backdrop') || cl.contains('toast') || cl.contains('exit-fs-btn')));
+        },
+        onclone: (clonedDoc) => {
+          const clonedSheet = clonedDoc.getElementById('sheet16x9');
+          if (!clonedSheet) return;
+          clonedSheet.querySelectorAll('.type-chip, .mv-type-sq, .mega-btn, .gender-circle, .ib-tag, .nat-mod-inline, .mv-cat, .st-sp-pill').forEach(el => {
+            el.innerHTML = `<span class="h2c-badge-txt">${el.innerHTML}</span>`;
+          });
+          const fixStyle = clonedDoc.createElement('style');
+          fixStyle.textContent = `
+            .banner-title { position: relative !important; top: -6px !important; }
+            .banner-sub { position: relative !important; top: -5px !important; }
+            .p-name { position: relative !important; top: -6px !important; }
+            .p-sub-en { position: relative !important; top: -3px !important; }
+            .ib-val-txt { position: relative !important; top: -4.5px !important; }
+            .mv-name { position: relative !important; top: -5px !important; }
+            .st-lbl { position: relative !important; top: -3px !important; }
+            .st-num { position: relative !important; top: -3.5px !important; }
+            .h2c-badge-txt { position: relative !important; top: -3px !important; display: inline-flex !important; align-items: center !important; gap: 3px !important; }
+          `;
+          clonedDoc.head.appendChild(fixStyle);
+        }
+      });
+      restoreLayout();
+      blob = await new Promise(resolve => fallbackCanvas.toBlob(resolve, 'image/png'));
+    }
 
     const titleSlug = (document.getElementById('metaTitle').value || '포챔스_파티').replace(/[\\/:*?"<>|]/g, '_');
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     const link = document.createElement('a');
     link.download = `${titleSlug}_16x9.png`;
     if (blob) {
@@ -654,8 +1097,8 @@ async function download16x9Image() {
       link.href = blobUrl;
       link.click();
       setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-    } else {
-      link.href = canvas.toDataURL('image/png');
+    } else if (fallbackCanvas) {
+      link.href = fallbackCanvas.toDataURL('image/png');
       link.click();
     }
     showToast('16:9 PNG 이미지가 저장되었습니다.');
@@ -664,6 +1107,10 @@ async function download16x9Image() {
   } finally {
     restoreLayout();
     isSavingImage = false;
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = prevBtnText;
+    }
   }
 }
 
