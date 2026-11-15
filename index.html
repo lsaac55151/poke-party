@@ -21,6 +21,8 @@
         <span class="app-title">POKÉMON CHAMPIONS PARTY</span>
       </div>
       <div class="sep"></div>
+      <button type="button" class="btn" onclick="openOcrModal()">스샷 입력 (Ctrl+V)</button>
+      <button type="button" class="ocr-pill" id="ocrStatusPill" onclick="openOcrModal()" hidden title="저장된 능력·스테이터스 스샷 정보 및 변환 내역 보기"></button>
       <button type="button" class="btn" onclick="openPasteModal()">쇼다운 입력 / 파일 열기</button>
       <button type="button" class="btn" onclick="openSlotEditor(0)">개별 포켓몬 편집</button>
       <button type="button" class="btn" onclick="copyShowdownExport()">쇼다운 복사</button>
@@ -111,6 +113,8 @@
       <a href="https://pokemonshowdown.com/" target="_blank" rel="noopener noreferrer">Pokémon Showdown</a> ·
       <a href="https://pokeapi.co/" target="_blank" rel="noopener noreferrer">PokeAPI</a> ·
       <a href="https://html2canvas.hertzen.com/" target="_blank" rel="noopener noreferrer">html2canvas (MIT)</a> ·
+      <a href="https://onnxruntime.ai/" target="_blank" rel="noopener noreferrer">ONNX Runtime Web (MIT)</a> ·
+      <a href="https://github.com/PaddlePaddle/PaddleOCR" target="_blank" rel="noopener noreferrer">PaddleOCR</a> ·
       <a href="https://github.com/lsaac55151/poke-party" target="_blank" rel="noopener noreferrer">GitHub</a>
     </span>
   </footer>
@@ -124,11 +128,14 @@
       </div>
       <div class="modal-body">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-          <span class="modal-subhint">쇼다운 형식의 파티 텍스트를 붙여넣거나 로컬 .txt 파일을 불러오세요.</span>
-          <label class="btn" style="cursor:pointer;">
-            <span>로컬 .txt 파일 열기</span>
-            <input type="file" accept=".txt" style="display:none;" onchange="handleTxtFileUpload(event)" />
-          </label>
+          <span class="modal-subhint">쇼다운 텍스트를 붙여넣거나 .txt / 게임 스샷(Ctrl+V)을 불러오세요.</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button type="button" class="btn" onclick="closePasteModal(); openOcrModal();">스샷 이미지 입력</button>
+            <label class="btn" style="cursor:pointer;">
+              <span>로컬 .txt 파일 열기</span>
+              <input type="file" accept=".txt" style="display:none;" onchange="handleTxtFileUpload(event)" />
+            </label>
+          </div>
         </div>
         <textarea id="pasteInput" class="paste-area" placeholder="포켓몬 쇼다운 파티 텍스트를 붙여넣으세요 (포챔스 SP 0~32 / 합계 66 및 기존 252 노력치 자동 환산 지원)"></textarea>
       </div>
@@ -201,6 +208,70 @@
     </div>
   </div>
 
+  <!-- Modal 3: Screenshot OCR Import & Status -->
+  <div class="modal-backdrop" id="ocrModal">
+    <div class="modal-card ocr-modal-card">
+      <div class="modal-head">
+        <span style="font-size:15px;font-weight:700;">스샷 자동 인식 (능력 · 스테이터스 → 쇼다운)</span>
+        <div style="display:flex;gap:6px;">
+          <button type="button" class="btn" id="ocrClearBtn" onclick="clearOcrState()" style="display:none;">스샷 내역 초기화</button>
+          <button type="button" class="btn" onclick="closeOcrModal()">닫기</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="ocr-drop-banner" id="ocrDropBanner">
+          <div class="ocr-drop-copy">
+            <strong>화면 어디서나 <code>Ctrl+V</code>로 스샷을 붙여넣거나 이미지를 드래그하세요</strong>
+            <span>[능력] 탭과 [스테이터스] 탭 스샷을 순서 상관없이 입력하면 자동으로 저장·병합되어 쇼다운 텍스트와 16:9 시트에 즉시 반영됩니다.</span>
+          </div>
+          <label class="btn btn-primary-cta" style="cursor:pointer;flex-shrink:0;">
+            <span>이미지 파일 선택</span>
+            <input id="screenshotFileInput" type="file" accept="image/*" multiple hidden onchange="handleScreenshotInputChange(event)" />
+          </label>
+        </div>
+
+        <div class="ocr-progress-wrap" id="ocrProgressWrap" hidden>
+          <div class="ocr-progress-head">
+            <span id="ocrProgressText">OCR 엔진 준비 중...</span>
+            <span id="ocrProgressPct">0%</span>
+          </div>
+          <div class="ocr-progress-track">
+            <div class="ocr-progress-bar" id="ocrProgressBar"></div>
+          </div>
+        </div>
+
+        <div class="ocr-tabs-status">
+          <div class="ocr-tab-box" id="ocrAbilityBox">
+            <span class="ocr-tab-name">[능력] 탭 (특성·도구·기술)</span>
+            <span class="ocr-tab-state" id="ocrAbilityState">미등록</span>
+          </div>
+          <div class="ocr-tab-box" id="ocrStatusBox">
+            <span class="ocr-tab-name">[스테이터스] 탭 (능력치·SP·성격)</span>
+            <span class="ocr-tab-state" id="ocrStatusState">미등록</span>
+          </div>
+        </div>
+
+        <div class="ocr-thumbs-strip" id="ocrThumbsStrip" hidden></div>
+        <div class="ocr-summary-box" id="ocrSummaryBox" hidden></div>
+
+        <div class="ocr-preview-wrap" id="ocrPreviewWrap" hidden>
+          <div class="ocr-preview-head">
+            <span class="modal-subhint">자동 변환된 쇼다운 텍스트 (이미 16:9 시트에 자동 반영됨)</span>
+            <div style="display:flex;gap:6px;">
+              <button type="button" class="btn" onclick="copyOcrShowdownText()">텍스트 복사</button>
+              <button type="button" class="btn" onclick="openPasteWithOcrText()">텍스트 편집기로 열기</button>
+            </div>
+          </div>
+          <textarea id="ocrShowdownPreview" class="paste-area ocr-preview-area" readonly></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="modal-subhint">100% 브라우저 로컬 ONNX OCR (서버 전송 없음 · 새로고침 시 유지)</span>
+        <button type="button" class="btn btn-primary-cta" onclick="closeOcrModal()">확인</button>
+      </div>
+    </div>
+  </div>
+
   <datalist id="speciesDatalist"></datalist>
   <datalist id="itemsDatalist"></datalist>
   <datalist id="abilitiesDatalist"></datalist>
@@ -208,6 +279,7 @@
   <div class="toast" id="toastBox"></div>
 
   <script src="./core.js"></script>
+  <script src="./ocr-engine.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

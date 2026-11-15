@@ -136,9 +136,10 @@ function renderSheet() {
     gridEl.innerHTML = `
       <div class="state-panel">
         <div class="state-title">등록된 포켓몬 파티가 없습니다</div>
-        <div class="state-desc">포켓몬 쇼다운 텍스트를 붙여넣거나 로컬 .txt 파일을 드래그 앤 드롭하세요.</div>
+        <div class="state-desc">게임 내 [능력]·[스테이터스] 스샷을 <b>Ctrl+V</b>로 붙여넣거나 쇼다운 텍스트 · .txt 파일을 드래그 앤 드롭하세요.</div>
         <div class="state-actions">
-          <button type="button" class="btn btn-primary-cta state-btn" onclick="openPasteModal()">쇼다운 텍스트 입력 / 파일 열기</button>
+          <button type="button" class="btn btn-primary-cta state-btn" onclick="openOcrModal()">스샷 자동 인식 (Ctrl+V)</button>
+          <button type="button" class="btn state-btn" onclick="openPasteModal()">쇼다운 텍스트 입력 / .txt</button>
           <button type="button" class="btn state-btn" onclick="openSlotEditor(0)">새 파티 짜기</button>
         </div>
       </div>`;
@@ -863,6 +864,31 @@ function saveSlotFromEditor() {
 
 const STORAGE_KEY = 'poke_champions_party_v2';
 
+let ocrState = {
+  abilityCards: [],
+  statusCards: [],
+  resolvedSets: [],
+  showdownText: '',
+  updatedAt: null
+};
+let ocrSessionScreens = [];
+let ocrProcessing = false;
+let ocrProgressInfo = null;
+let ocrDbRef = null;
+
+function sanitizeSavedOcrState(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { abilityCards: [], statusCards: [], resolvedSets: [], showdownText: '', updatedAt: null };
+  }
+  return {
+    abilityCards: Array.isArray(raw.abilityCards) ? raw.abilityCards : [],
+    statusCards: Array.isArray(raw.statusCards) ? raw.statusCards : [],
+    resolvedSets: Array.isArray(raw.resolvedSets) ? raw.resolvedSets : [],
+    showdownText: typeof raw.showdownText === 'string' ? raw.showdownText : '',
+    updatedAt: typeof raw.updatedAt === 'number' ? raw.updatedAt : null
+  };
+}
+
 function buildExportableState() {
   return {
     party: currentParty,
@@ -873,7 +899,14 @@ function buildExportableState() {
     viewMode: document.getElementById('viewModeSelect').value,
     lang: document.getElementById('langSelect').value,
     megaMode: document.getElementById('megaModeSelect').value,
-    showBanner: document.getElementById('showBannerCheck').checked
+    showBanner: document.getElementById('showBannerCheck').checked,
+    ocrState: {
+      abilityCards: ocrState.abilityCards,
+      statusCards: ocrState.statusCards,
+      resolvedSets: ocrState.resolvedSets,
+      showdownText: ocrState.showdownText,
+      updatedAt: ocrState.updatedAt
+    }
   };
 }
 
@@ -888,7 +921,9 @@ function applyImportedState(st) {
   if (st.lang) document.getElementById('langSelect').value = st.lang;
   if (st.megaMode) document.getElementById('megaModeSelect').value = st.megaMode;
   if (typeof st.showBanner === 'boolean') document.getElementById('showBannerCheck').checked = st.showBanner;
+  ocrState = sanitizeSavedOcrState(st.ocrState);
   renderSheet();
+  renderOcrStatusUi();
   return true;
 }
 
@@ -908,7 +943,9 @@ function loadInitialState() {
     }
   } catch (_) {}
   currentParty = [];
+  ocrState = sanitizeSavedOcrState(null);
   renderSheet();
+  renderOcrStatusUi();
 }
 
 function showToast(msg) {
@@ -921,9 +958,19 @@ function showToast(msg) {
 
 window.addEventListener('resize', fitStageToViewport);
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const ocrM = document.getElementById('ocrModal');
+    if (ocrM && ocrM.classList.contains('open')) {
+      closeOcrModal();
+      return;
+    }
+    if (document.body.classList.contains('presentation-mode')) {
+      togglePresentationMode();
+      return;
+    }
+  }
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
   if (e.key === 'f' || e.key === 'F') { e.preventDefault(); togglePresentationMode(); }
-  else if (e.key === 'Escape' && document.body.classList.contains('presentation-mode')) togglePresentationMode();
 });
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -936,23 +983,496 @@ window.addEventListener('DOMContentLoaded', () => {
       fitStageToViewport();
     });
   }
-  window.addEventListener('dragover', e => e.preventDefault());
-  window.addEventListener('drop', e => {
+
+  window.addEventListener('paste', (e) => {
+    const imgFiles = extractImageFilesFromTransfer(e.clipboardData);
+    if (imgFiles.length > 0) {
+      e.preventDefault();
+      handleScreenshotFiles(imgFiles);
+    }
+  });
+
+  const banner = document.getElementById('ocrDropBanner');
+  window.addEventListener('dragover', (e) => {
     e.preventDefault();
-    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file && /\.txt$/i.test(file.name)) {
+    if (banner) banner.classList.add('drag-over');
+  });
+  window.addEventListener('dragleave', (e) => {
+    if (!e.relatedTarget && banner) banner.classList.remove('drag-over');
+  });
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (banner) banner.classList.remove('drag-over');
+    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+    if (!files.length) return;
+
+    const imgFiles = files.filter(isImageFile);
+    if (imgFiles.length > 0) {
+      handleScreenshotFiles(imgFiles);
+      return;
+    }
+
+    const txtFile = files.find((f) => /\.txt$/i.test(f.name));
+    if (txtFile) {
       const r = new FileReader();
-      r.onload = ev => {
+      r.onload = (ev) => {
         const res = parseShowdownPaste(String(ev.target.result || ''), document.getElementById('megaModeSelect').value === 'auto');
         if (res.party.length) {
           lastErrorMsg = '';
           currentParty = res.party;
-          document.getElementById('metaTitle').value = file.name.replace(/\.txt$/i, '');
+          document.getElementById('metaTitle').value = txtFile.name.replace(/\.txt$/i, '');
           renderSheet();
-          showToast(`${file.name} 파티가 적용되었습니다.`);
+          showToast(`${txtFile.name} 파티가 적용되었습니다.`);
         }
       };
-      r.readAsText(file, 'utf-8');
+      r.readAsText(txtFile, 'utf-8');
     }
   });
+
+  const ocrModal = document.getElementById('ocrModal');
+  if (ocrModal) {
+    ocrModal.addEventListener('click', (e) => {
+      if (e.target === ocrModal) closeOcrModal();
+    });
+  }
 });
+
+// ==================== SCREENSHOT OCR PIPELINE ====================
+function isImageFile(file) {
+  if (!file) return false;
+  return (file.type && file.type.startsWith('image/')) || /\.(png|jpe?g|webp|bmp)$/i.test(file.name || '');
+}
+
+function extractImageFilesFromTransfer(dt) {
+  if (!dt) return [];
+  const out = [];
+  if (dt.items && dt.items.length) {
+    for (let i = 0; i < dt.items.length; i++) {
+      const item = dt.items[i];
+      if (item.kind === 'file' && (!item.type || item.type.startsWith('image/'))) {
+        const f = item.getAsFile();
+        if (f && isImageFile(f)) out.push(f);
+      }
+    }
+  }
+  if (!out.length && dt.files && dt.files.length) {
+    for (let i = 0; i < dt.files.length; i++) {
+      if (isImageFile(dt.files[i])) out.push(dt.files[i]);
+    }
+  }
+  return out;
+}
+
+function escapeOcrHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function openOcrModal() {
+  renderOcrStatusUi();
+  document.getElementById('ocrModal').classList.add('open');
+}
+
+function closeOcrModal() {
+  document.getElementById('ocrModal').classList.remove('open');
+}
+
+function handleScreenshotInputChange(event) {
+  const input = event.target;
+  const files = input && input.files ? Array.from(input.files).filter(isImageFile) : [];
+  if (input) input.value = '';
+  if (files.length) handleScreenshotFiles(files);
+}
+
+function formatOcrProgress(info) {
+  ocrProgressInfo = info;
+  renderOcrProgressUi();
+}
+
+function renderOcrProgressUi() {
+  const wrap = document.getElementById('ocrProgressWrap');
+  const txt = document.getElementById('ocrProgressText');
+  const pct = document.getElementById('ocrProgressPct');
+  const bar = document.getElementById('ocrProgressBar');
+  if (!wrap) return;
+
+  if (!ocrProcessing || !ocrProgressInfo) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  const ratio = Math.max(0, Math.min(1, Number(ocrProgressInfo.ratio) || 0));
+  const percent = Math.round(ratio * 100);
+  txt.textContent = ocrProgressInfo.stage || '인식 중...';
+  pct.textContent = `${percent}%`;
+  bar.style.width = `${percent}%`;
+}
+
+function renderOcrStatusUi() {
+  renderOcrProgressUi();
+
+  const abCount = ocrState.abilityCards.length;
+  const stCount = ocrState.statusCards.length;
+  const pill = document.getElementById('ocrStatusPill');
+  if (pill) {
+    if (ocrProcessing) {
+      pill.hidden = false;
+      pill.className = 'ocr-pill busy';
+      pill.textContent = (ocrProgressInfo && ocrProgressInfo.stage) || '스샷 OCR 인식 중...';
+    } else if (abCount > 0 || stCount > 0) {
+      pill.hidden = false;
+      const warnCount = (ocrState.resolvedSets || []).reduce((acc, s) => acc + (s.warnings && s.warnings.length ? 1 : 0), 0);
+      if (abCount > 0 && stCount > 0) {
+        pill.className = warnCount > 0 ? 'ocr-pill partial' : 'ocr-pill complete';
+        pill.textContent = warnCount > 0
+          ? `스샷 저장됨 (확인 ${warnCount})`
+          : `능력+스테이터스 ✓`;
+      } else {
+        pill.className = 'ocr-pill partial';
+        pill.textContent = abCount > 0 ? '능력 ✓ · 스테이터스 대기' : '스테이터스 ✓ · 능력 대기';
+      }
+    } else {
+      pill.hidden = true;
+    }
+  }
+
+  const abBox = document.getElementById('ocrAbilityBox');
+  const abTxt = document.getElementById('ocrAbilityState');
+  if (abBox && abTxt) {
+    abBox.classList.toggle('saved', abCount > 0);
+    abTxt.textContent = abCount > 0 ? `저장됨 · ${abCount}슬롯` : '미등록';
+  }
+
+  const stBox = document.getElementById('ocrStatusBox');
+  const stTxt = document.getElementById('ocrStatusState');
+  if (stBox && stTxt) {
+    stBox.classList.toggle('saved', stCount > 0);
+    stTxt.textContent = stCount > 0 ? `저장됨 · ${stCount}슬롯` : '미등록';
+  }
+
+  const clearBtn = document.getElementById('ocrClearBtn');
+  if (clearBtn) {
+    clearBtn.style.display = (abCount > 0 || stCount > 0 || ocrSessionScreens.length > 0) ? '' : 'none';
+  }
+
+  const strip = document.getElementById('ocrThumbsStrip');
+  if (strip) {
+    if (!ocrSessionScreens.length) {
+      strip.hidden = true;
+      strip.innerHTML = '';
+    } else {
+      strip.hidden = false;
+      strip.innerHTML = ocrSessionScreens.map((sc) => `
+        <div class="ocr-thumb-card">
+          <img src="${sc.previewUrl}" alt="${escapeOcrHtml(sc.name)}" />
+          <div class="ocr-thumb-meta">
+            <div class="ocr-tab-switch">
+              <button type="button" class="${sc.tabType === 'ability' ? 'active' : ''}" onclick="toggleOcrSessionScreenTab('${escapeOcrHtml(sc.id)}', 'ability')">능력 탭</button>
+              <button type="button" class="${sc.tabType === 'status' ? 'active' : ''}" onclick="toggleOcrSessionScreenTab('${escapeOcrHtml(sc.id)}', 'status')">스테이터스</button>
+            </div>
+            <button type="button" class="btn" style="padding:3px 7px;font-size:11px;" onclick="removeOcrSessionScreen('${escapeOcrHtml(sc.id)}')">제거</button>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
+  const summaryBox = document.getElementById('ocrSummaryBox');
+  if (summaryBox) {
+    const sets = ocrState.resolvedSets || [];
+    if (!sets.length) {
+      summaryBox.hidden = true;
+      summaryBox.innerHTML = '';
+    } else {
+      summaryBox.hidden = false;
+      summaryBox.innerHTML = sets.map((s) => {
+        const hasWarn = Array.isArray(s.warnings) && s.warnings.length > 0;
+        const nameKo = s.speciesKo || s.speciesName || '미인식';
+        const statusText = hasWarn
+          ? s.warnings.join(' · ')
+          : `검증 완료 (${s.nature}, SP ${Object.values(s.sp || {}).reduce((a, b) => a + (b || 0), 0)}/66)`;
+        return `
+          <div class="ocr-summary-row ${hasWarn ? 'warn' : 'ok'}">
+            <strong><span class="ocr-slot-badge">${hasWarn ? '!' : '✓'}</span> #${s.slot + 1} ${escapeOcrHtml(nameKo)}</strong>
+            <span>${escapeOcrHtml(statusText)}</span>
+          </div>`;
+      }).join('');
+    }
+  }
+
+  const prevWrap = document.getElementById('ocrPreviewWrap');
+  const prevText = document.getElementById('ocrShowdownPreview');
+  if (prevWrap && prevText) {
+    if (ocrState.showdownText) {
+      prevWrap.hidden = false;
+      prevText.value = ocrState.showdownText;
+    } else {
+      prevWrap.hidden = true;
+      prevText.value = '';
+    }
+  }
+}
+
+function hydrateExistingMovesOntoStatusSets(sets, db) {
+  if (!currentParty.length || !db || typeof POKEMON_DATA === 'undefined') return;
+  const dexItems = POKEMON_DATA.items || {};
+  const dexAbils = POKEMON_DATA.abilities || {};
+  const dexMoves = POKEMON_DATA.moves || {};
+
+  for (let i = 0; i < sets.length; i++) {
+    const s = sets[i];
+    const prev = currentParty[i];
+    if (!s || !prev || !s.speciesId || s.speciesId !== prev.speciesId) continue;
+
+    if (!s.itemName && prev.itemId && dexItems[prev.itemId]) {
+      s.itemId = prev.itemId;
+      s.itemName = dexItems[prev.itemId].name;
+      s.itemKo = dexItems[prev.itemId].ko || s.itemName;
+    }
+    if (!s.abilityName && prev.abilityId && dexAbils[prev.abilityId]) {
+      s.abilityId = prev.abilityId;
+      s.abilityName = dexAbils[prev.abilityId].name;
+      s.abilityKo = dexAbils[prev.abilityId].ko || s.abilityName;
+    }
+    if ((!s.moves || s.moves.every((m) => !m.name)) && Array.isArray(prev.moves)) {
+      s.moves = prev.moves.map((mvId) => {
+        const mv = mvId ? dexMoves[mvId] : null;
+        return mv
+          ? { id: mvId, name: mv.name, ko: mv.ko || mv.name, ocr: '', score: 1 }
+          : { id: '', name: '', ko: '', ocr: '', score: 0 };
+      });
+    }
+  }
+}
+
+function applyOcrMergeAndRefresh(db, customToast) {
+  const abilityScreens = ocrState.abilityCards.length ? [ocrState.abilityCards] : [];
+  const statusScreens = ocrState.statusCards.length ? [ocrState.statusCards] : [];
+
+  if (!abilityScreens.length && !statusScreens.length) {
+    ocrState.resolvedSets = [];
+    ocrState.showdownText = '';
+    ocrState.updatedAt = null;
+    saveStateToStorage();
+    renderOcrStatusUi();
+    return;
+  }
+
+  const sets = window.ChampionsOcr.mergeAndResolveTeam(abilityScreens, statusScreens, db);
+  if (!abilityScreens.length && statusScreens.length && currentParty.length) {
+    hydrateExistingMovesOntoStatusSets(sets, db);
+  }
+
+  const showdown = window.ChampionsOcr.formatTeamShowdown(sets, db, {
+    includeLevel50: true,
+    includeGender: true,
+    statMode: 'champions'
+  });
+
+  ocrState.resolvedSets = sets;
+  ocrState.showdownText = showdown;
+  ocrState.updatedAt = Date.now();
+
+  const pasteEl = document.getElementById('pasteInput');
+  if (pasteEl) pasteEl.value = showdown;
+
+  const megaAuto = document.getElementById('megaModeSelect').value === 'auto';
+  const parsed = parseShowdownPaste(showdown, megaAuto);
+
+  if (parsed.party.length > 0) {
+    lastErrorMsg = '';
+    currentParty = parsed.party;
+    renderSheet();
+  } else {
+    renderSheet();
+  }
+  renderOcrStatusUi();
+
+  if (customToast) {
+    showToast(customToast);
+    return;
+  }
+
+  const hasAb = ocrState.abilityCards.length > 0;
+  const hasSt = ocrState.statusCards.length > 0;
+  const partyLen = parsed.party.length;
+  if (hasAb && hasSt) {
+    const warnSlots = sets.filter((s) => s.warnings && s.warnings.length > 0).length;
+    showToast(
+      warnSlots > 0
+        ? `능력+스테이터스 병합 완료 (${partyLen}마리 시트 반영 · 확인 ${warnSlots}건)`
+        : `스샷 인식 완료! ${partyLen}마리 쇼다운 변환 및 16:9 시트 반영 완료`,
+    );
+  } else if (hasAb) {
+    showToast(`[능력] 탭 ${partyLen}마리 저장·반영! [스테이터스] 스샷도 붙여넣으면 능력치·성격이 병합됩니다.`);
+  } else {
+    showToast(`[스테이터스] 탭 ${partyLen}마리 저장·반영! [능력] 스샷도 붙여넣으면 기술·특성·도구가 병합됩니다.`);
+  }
+}
+
+async function handleScreenshotFiles(fileList) {
+  if (!window.ChampionsOcr) {
+    showToast('OCR 모듈이 아직 로드되지 않았습니다.');
+    return;
+  }
+  if (ocrProcessing) {
+    showToast('이전 스크린샷을 인식하는 중입니다. 잠시만 기다려주세요.');
+    return;
+  }
+
+  const files = Array.from(fileList || []).filter(isImageFile);
+  if (!files.length) return;
+
+  ocrProcessing = true;
+  formatOcrProgress({ stage: '이미지 분석 준비 중...', ratio: 0.05 });
+  renderOcrStatusUi();
+
+  const seenTabsInBatch = new Set();
+  let teamResetByNewParty = false;
+
+  try {
+    for (let idx = 0; idx < files.length; idx++) {
+      const file = files[idx];
+      formatOcrProgress({
+        stage: `스샷 (${idx + 1}/${files.length}) OCR 인식 중...`,
+        ratio: Math.min(0.95, 0.1 + (idx / files.length) * 0.8),
+      });
+      renderOcrStatusUi();
+
+      const loaded = await window.ChampionsOcr.loadImageFileToCanvas(file);
+      const res = await window.ChampionsOcr.analyzeAndRecognizeCanvas(loaded.canvas, {
+        onProgress: formatOcrProgress,
+      });
+      ocrDbRef = res.db;
+
+      const tabType = res.tabType;
+      const newCards = tabType === 'ability' ? res.abilityCards : res.statusCards;
+      const otherTab = tabType === 'ability' ? 'status' : 'ability';
+      const otherCards = otherTab === 'ability' ? ocrState.abilityCards : ocrState.statusCards;
+
+      if (!seenTabsInBatch.has(otherTab) && otherCards.length > 0) {
+        if (!window.ChampionsOcr.areScreensCompatibleTeam(newCards, otherCards, res.db)) {
+          if (otherTab === 'ability') ocrState.abilityCards = [];
+          else ocrState.statusCards = [];
+          ocrSessionScreens = ocrSessionScreens.filter((s) => s.tabType !== otherTab);
+          teamResetByNewParty = true;
+        }
+      }
+
+      seenTabsInBatch.add(tabType);
+      if (tabType === 'ability') ocrState.abilityCards = newCards;
+      else ocrState.statusCards = newCards;
+
+      ocrSessionScreens = ocrSessionScreens.filter((s) => s.tabType !== tabType);
+      ocrSessionScreens.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: file.name || `${tabType}.png`,
+        tabType,
+        canvas: loaded.canvas,
+        previewUrl: loaded.previewUrl,
+        abilityCards: res.abilityCards,
+        statusCards: res.statusCards,
+      });
+    }
+
+    if (ocrDbRef) {
+      const note = teamResetByNewParty ? '새 파티로 인식되어 기존 반대 탭 스샷을 초기화 후 적용했습니다.' : '';
+      applyOcrMergeAndRefresh(ocrDbRef, note || undefined);
+    }
+  } catch (err) {
+    console.error('[ChampionsOCR]', err);
+    showToast(err && err.message ? err.message : '스크린샷 OCR 중 오류가 발생했습니다.');
+  } finally {
+    ocrProcessing = false;
+    ocrProgressInfo = null;
+    renderOcrStatusUi();
+  }
+}
+
+async function toggleOcrSessionScreenTab(screenId, nextTab) {
+  if (ocrProcessing) return;
+  const idx = ocrSessionScreens.findIndex((s) => s.id === screenId);
+  if (idx === -1) return;
+  const sc = ocrSessionScreens[idx];
+  if (sc.tabType === nextTab) return;
+
+  ocrProcessing = true;
+  formatOcrProgress({ stage: `${nextTab === 'ability' ? '능력' : '스테이터스'} 탭으로 재인식 중...`, ratio: 0.4 });
+  renderOcrStatusUi();
+
+  try {
+    const res = await window.ChampionsOcr.analyzeAndRecognizeCanvas(sc.canvas, {
+      overrideTab: nextTab,
+      onProgress: formatOcrProgress,
+    });
+    ocrDbRef = res.db;
+
+    const oldTab = sc.tabType;
+    sc.tabType = nextTab;
+    sc.abilityCards = res.abilityCards;
+    sc.statusCards = res.statusCards;
+
+    if (oldTab === 'ability') ocrState.abilityCards = [];
+    else ocrState.statusCards = [];
+
+    ocrSessionScreens = ocrSessionScreens.filter((item) => item.id === sc.id || item.tabType !== nextTab);
+
+    if (nextTab === 'ability') ocrState.abilityCards = res.abilityCards;
+    else ocrState.statusCards = res.statusCards;
+
+    applyOcrMergeAndRefresh(res.db);
+  } catch (err) {
+    console.error('[ChampionsOCR]', err);
+    showToast(err && err.message ? err.message : '탭 재인식 중 오류가 발생했습니다.');
+  } finally {
+    ocrProcessing = false;
+    ocrProgressInfo = null;
+    renderOcrStatusUi();
+  }
+}
+
+async function removeOcrSessionScreen(screenId) {
+  const sc = ocrSessionScreens.find((s) => s.id === screenId);
+  if (!sc) return;
+  ocrSessionScreens = ocrSessionScreens.filter((s) => s.id !== screenId);
+  if (sc.tabType === 'ability') ocrState.abilityCards = [];
+  else ocrState.statusCards = [];
+
+  if (ocrState.abilityCards.length || ocrState.statusCards.length) {
+    const db = ocrDbRef || await window.ChampionsOcr.loadDb();
+    ocrDbRef = db;
+    applyOcrMergeAndRefresh(db, '선택한 스샷을 제외하고 다시 반영했습니다.');
+  } else {
+    ocrState.resolvedSets = [];
+    ocrState.showdownText = '';
+    ocrState.updatedAt = null;
+    saveStateToStorage();
+    renderOcrStatusUi();
+  }
+}
+
+function clearOcrState() {
+  ocrSessionScreens = [];
+  ocrState = sanitizeSavedOcrState(null);
+  saveStateToStorage();
+  renderOcrStatusUi();
+  showToast('저장된 스샷 인식 내역을 초기화했습니다.');
+}
+
+function copyOcrShowdownText() {
+  const text = ocrState.showdownText || exportToShowdownPaste(currentParty);
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => showToast('쇼다운 텍스트가 복사되었습니다.'));
+}
+
+function openPasteWithOcrText() {
+  const text = ocrState.showdownText || exportToShowdownPaste(currentParty);
+  closeOcrModal();
+  openPasteModal();
+  if (text) {
+    document.getElementById('pasteInput').value = text;
+  }
+}
