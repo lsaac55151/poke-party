@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>포켓몬 챔피언스 파티 시트</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800;900&family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="./pokemon-data.js"></script>
+</head>
+<body class="theme-ingame">
+
+  <!-- Top Control Bar -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="app-brand">
+        <span class="brand-dot"></span>
+        <span class="app-title">POKÉMON CHAMPIONS PARTY</span>
+      </div>
+      <div class="sep"></div>
+      <button type="button" class="btn" onclick="openPasteModal()">쇼다운 입력 / 파일 열기</button>
+      <button type="button" class="btn" onclick="openSlotEditor(0)">개별 포켓몬 편집</button>
+      <button type="button" class="btn" onclick="copyShowdownExport()">쇼다운 복사</button>
+    </div>
+
+    <div class="topbar-right">
+      <button type="button" class="btn" onclick="togglePresentationMode()">전체화면 (F)</button>
+      <button type="button" class="btn btn-primary-cta" onclick="download16x9Image()">16:9 이미지 저장 (PNG)</button>
+    </div>
+  </header>
+
+  <!-- Sheet Header Metadata & Display Settings Bar -->
+  <div class="subbar">
+    <div class="subbar-fields">
+      <label class="field-inline" style="cursor:pointer;">
+        <input type="checkbox" id="showBannerCheck" checked onchange="renderSheet()" />
+        <span>상단 배너</span>
+      </label>
+      <label class="field-inline">
+        <span>파티명</span>
+        <input type="text" id="metaTitle" class="ctrl-input" style="width:195px;" value="" placeholder="파티명 입력" oninput="renderSheet()" />
+      </label>
+      <label class="field-inline">
+        <span>설명</span>
+        <input type="text" id="metaSubtitle" class="ctrl-input" style="width:155px;" value="" placeholder="설명 입력" oninput="renderSheet()" />
+      </label>
+    </div>
+
+    <div class="subbar-right">
+      <select id="themeSelect" class="ctrl-select" onchange="renderSheet()" aria-label="컬러 테마">
+        <option value="ingame" selected>포챔스 인게임 (퍼플·크림골드)</option>
+        <option value="logo">포챔스 로고 (네이비·골드)</option>
+        <option value="dark">뉴트럴 다크</option>
+      </select>
+      <select id="gridSelect" class="ctrl-select" onchange="renderSheet()" aria-label="배열 구조">
+        <option value="3x2" selected>3열 × 2행</option>
+        <option value="2x3">2열 × 3행 (인게임 배열)</option>
+      </select>
+      <select id="viewModeSelect" class="ctrl-select" onchange="renderSheet()" aria-label="표시 정보">
+        <option value="full" selected>능력 + 실능/SP 모두 표시</option>
+        <option value="ingame">능력만 표시 (인게임형)</option>
+      </select>
+      <select id="langSelect" class="ctrl-select" onchange="renderSheet()" aria-label="표시 언어">
+        <option value="ko" selected>한국어</option>
+        <option value="ja">日本語 (일본어)</option>
+        <option value="en">English (영어)</option>
+        <option value="ko-ja">한·일 병기</option>
+        <option value="both">한·영 병기</option>
+      </select>
+      <select id="megaModeSelect" class="ctrl-select" onchange="updateGlobalSettings()" aria-label="메가진화 표시">
+        <option value="auto" selected>메가진화 폼 표시</option>
+        <option value="base">기본 폼 표시</option>
+      </select>
+    </div>
+  </div>
+
+  <button type="button" class="btn exit-fs-btn" onclick="togglePresentationMode()">편집 화면 복귀 (ESC)</button>
+
+  <!-- 16:9 Studio Workspace -->
+  <main class="workspace">
+    <div class="stage-viewport" id="stageViewport">
+      <div class="stage-scaler" id="stageScaler">
+        <section class="sheet-16x9" id="sheet16x9">
+          <!-- In-Game Style Top Banner -->
+          <div class="sheet-banner">
+            <div class="banner-bar">
+              <div class="banner-title" id="viewTitle"></div>
+              <div class="banner-center-divider">
+                <div class="pokeball-emblem"></div>
+              </div>
+              <div class="banner-sub" id="viewSubtitle"></div>
+            </div>
+          </div>
+
+          <!-- 6 Pokemon Grid -->
+          <div class="party-grid" id="partyGrid"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer" aria-label="면책 조항 및 출처">
+    <span class="footer-disclaimer">
+      비공식 · 비상업 팬 제작 도구이며 Nintendo · Creatures Inc. · GAME FREAK inc. · The Pokémon Company와 무관합니다. 포켓몬 관련 상표 및 저작권은 각 권리자에게 귀속됩니다.
+    </span>
+    <span class="footer-credits">
+      데이터·오픈소스:
+      <a href="https://pokemonshowdown.com/" target="_blank" rel="noopener noreferrer">Pokémon Showdown</a> ·
+      <a href="https://pokeapi.co/" target="_blank" rel="noopener noreferrer">PokeAPI</a> ·
+      <a href="https://html2canvas.hertzen.com/" target="_blank" rel="noopener noreferrer">html2canvas (MIT)</a> ·
+      <a href="https://github.com/lsaac55151/poke-party" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </span>
+  </footer>
+
+  <!-- Modal 1: Showdown Paste Input -->
+  <div class="modal-backdrop" id="pasteModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <span style="font-size:15px;font-weight:700;">포켓몬 쇼다운 파티 텍스트 입력</span>
+        <button type="button" class="btn" onclick="closePasteModal()">닫기</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <span class="modal-subhint">쇼다운 형식의 파티 텍스트를 붙여넣거나 로컬 .txt 파일을 불러오세요.</span>
+          <label class="btn" style="cursor:pointer;">
+            <span>로컬 .txt 파일 열기</span>
+            <input type="file" accept=".txt" style="display:none;" onchange="handleTxtFileUpload(event)" />
+          </label>
+        </div>
+        <textarea id="pasteInput" class="paste-area" placeholder="포켓몬 쇼다운 파티 텍스트를 붙여넣으세요 (포챔스 SP 0~32 / 합계 66 및 기존 252 노력치 자동 환산 지원)"></textarea>
+      </div>
+      <div class="modal-foot">
+        <span class="modal-subhint">영문·국문·일문 쇼다운 텍스트를 모두 인식합니다.</span>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn" onclick="closePasteModal()">취소</button>
+          <button type="button" class="btn btn-primary-cta" onclick="applyPasteInput()">16:9 시트에 적용</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Individual Slot Editor -->
+  <div class="modal-backdrop" id="editorModal">
+    <div class="modal-card" style="max-width:920px;">
+      <div class="modal-head">
+        <span style="font-size:15px;font-weight:700;">포켓몬 상세 편집 (Lv.50 · 6V 고정 · SP 66)</span>
+        <button type="button" class="btn" onclick="closeSlotEditor()">닫기</button>
+      </div>
+      <div class="modal-body">
+        <div id="editorSlotTabs" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+        <div class="editor-2col">
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="modal-sec-label">포켓몬 · 도구 · 특성 · 기술</span>
+              <span id="quickMegaStoneContainer" style="display:flex;gap:4px;"></span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 110px;gap:8px;">
+              <input type="text" id="edSpecies" list="speciesDatalist" class="ctrl-input" placeholder="포켓몬 (한/일/영)" onchange="onEditorSpeciesChange()" />
+              <select id="edGender" class="ctrl-input" onchange="saveSlotFromEditor()">
+                <option value="">성별 미표시</option>
+                <option value="M">♂ (M)</option>
+                <option value="F">♀ (F)</option>
+              </select>
+            </div>
+            <input type="text" id="edItem" list="itemsDatalist" class="ctrl-input" placeholder="지닌물건 (한/일/영)" onchange="saveSlotFromEditor()" />
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <input type="text" id="edAbility" list="abilitiesDatalist" class="ctrl-input" placeholder="특성" onchange="saveSlotFromEditor()" />
+              <select id="edNature" class="ctrl-input" onchange="saveSlotFromEditor()"></select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <input type="text" id="edMove0" list="movesDatalist" class="ctrl-input" placeholder="기술 1" onchange="saveSlotFromEditor()" />
+              <input type="text" id="edMove1" list="movesDatalist" class="ctrl-input" placeholder="기술 2" onchange="saveSlotFromEditor()" />
+              <input type="text" id="edMove2" list="movesDatalist" class="ctrl-input" placeholder="기술 3" onchange="saveSlotFromEditor()" />
+              <input type="text" id="edMove3" list="movesDatalist" class="ctrl-input" placeholder="기술 4" onchange="saveSlotFromEditor()" />
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="modal-sec-label">능력 포인트 (SP) 배분 및 실능</span>
+              <span id="edSpTotalBadge" style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;">0 / 66 SP</span>
+            </div>
+            <div id="spSlidersContainer" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;">
+              <button type="button" class="btn" onclick="resetCurrentSlotSP()">SP 초기화</button>
+              <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="checkbox" id="edForceMegaView" onchange="saveSlotFromEditor()" />
+                <span>메가스톤 보유 시 메가진화 폼 표시</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="modal-subhint">모든 수정 사항은 즉시 16:9 시트에 반영됩니다.</span>
+        <button type="button" class="btn btn-primary-cta" onclick="closeSlotEditor()">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <datalist id="speciesDatalist"></datalist>
+  <datalist id="itemsDatalist"></datalist>
+  <datalist id="abilitiesDatalist"></datalist>
+  <datalist id="movesDatalist"></datalist>
+  <div class="toast" id="toastBox"></div>
+
+  <script src="./core.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
