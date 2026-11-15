@@ -297,6 +297,14 @@ function toEnKey(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g,
 
 (function buildLookups() {
   for (const [k, v] of Object.entries(D.dex)) {
+    if (v.base && D.dex[v.base]) {
+      const base = D.dex[v.base];
+      if (!v.bs && base.bs) v.bs = base.bs;
+      if ((!v.types || !v.types.length) && base.types) v.types = base.types;
+      if ((!v.ab || !v.ab.length) && base.ab) v.ab = base.ab;
+      if (!v.num && base.num) v.num = base.num;
+      if (!v.gender && base.gender) v.gender = base.gender;
+    }
     LOOKUP.dex[k] = k;
     LOOKUP.dex[toEnKey(v.name)] = k;
     LOOKUP.dex[toKey(v.ko)] = k;
@@ -364,9 +372,11 @@ function findDedicatedMegaStones(spEntry) {
 
 function calcChampionsStats(baseStats, sp, natureName, speciesId) {
   const nat = NATURES[natureName] || NATURES.Serious;
+  const spEntry = speciesId ? D.dex[speciesId] : null;
+  const resolvedBs = baseStats || (spEntry && (spEntry.bs || (spEntry.base && D.dex[spEntry.base] && D.dex[spEntry.base].bs)));
   const res = {};
   for (const k of STAT_KEYS) {
-    const base = baseStats ? (baseStats[k] || 80) : 80;
+    const base = resolvedBs ? (resolvedBs[k] || 80) : 80;
     const pts = Number(sp ? (sp[k] || 0) : 0);
     if (k === 'hp') {
       res.hp = speciesId === 'shedinja' ? 1 : (base + pts + 75);
@@ -436,7 +446,7 @@ function parseShowdownPaste(rawText, defaultShowMega) {
     if (Math.max(...Object.values(sp)) > 32 || total > 66) {
       convertedFrom252 = true;
       for (const k of STAT_KEYS) {
-        if (sp[k] > 0) sp[k] = Math.min(32, Math.max(1, Math.round((sp[k] + 4) / 8)));
+        if (sp[k] > 0) sp[k] = Math.min(32, Math.floor((sp[k] + 4) / 8));
       }
     }
     while (moves.length < 4) moves.push('');
