@@ -119,6 +119,10 @@
     return out;
   }
 
+  function foldJaDakuten(input) {
+    return input.normalize('NFD').replace(/[\u3099\u309a]/g, '').normalize('NFC');
+  }
+
   function japaneseSimilarity(a, b) {
     const na = normalizeForMatch(a);
     const nb = normalizeForMatch(b);
@@ -138,8 +142,15 @@
     const rawSim = 1 - levenshtein(ha, hb) / maxRaw;
     const maxFold = Math.max(fa.length, fb.length);
     const foldSim = 1 - levenshtein(fa, fb) / maxFold;
+    const baseSim = 0.35 * rawSim + 0.65 * foldSim;
 
-    return 0.35 * rawSim + 0.65 * foldSim;
+    // Low-res mobile JPEG crops frequently drop/swap dakuten or handakuten (オボン <-> オポン)
+    const da = foldJaDakuten(fa);
+    const db = foldJaDakuten(fb);
+    if (!da || !db) return baseSim;
+    if (da === db) return Math.max(baseSim, 0.975);
+    const dakSim = 1 - levenshtein(da, db) / Math.max(da.length, db.length);
+    return Math.max(baseSim, Math.min(0.97, 0.45 * baseSim + 0.55 * dakSim));
   }
 
   // =========================================================================
@@ -1535,6 +1546,26 @@
     }
   }
 
+  function hydrateDbJapaneseNames(db) {
+    const pData = typeof root !== 'undefined' && root.POKEMON_DATA;
+    if (!db || !pData) return db;
+    const pairs = [
+      [db.species, pData.dex],
+      [db.abilities, pData.abilities],
+      [db.items, pData.items],
+      [db.moves, pData.moves],
+    ];
+    for (const [targetPool, srcPool] of pairs) {
+      if (!targetPool || !srcPool) continue;
+      for (const [id, entry] of Object.entries(targetPool)) {
+        if (entry && !entry.ja && srcPool[id] && srcPool[id].ja) {
+          entry.ja = srcPool[id].ja;
+        }
+      }
+    }
+    return db;
+  }
+
   async function loadDb(onProgress) {
     if (cachedDb) return cachedDb;
     if (dbPromise) return dbPromise;
@@ -1542,10 +1573,10 @@
 
     dbPromise = (async () => {
       if (onProgress) onProgress({ stageKey: 'loading_champions_db', stage: '챔피언스 데이터 불러오는 중...', ratio: 0.08 });
-      const url = new URL('data/champions-db.json', ENGINE_BASE_URL).href;
+      const url = new URL('data/champions-db.json?v=20261115p', ENGINE_BASE_URL).href;
       const res = await fetch(url);
       if (!res.ok) throw new Error(ocrText('dbLoadErr', { status: res.status }));
-      const json = await res.json();
+      const json = hydrateDbJapaneseNames(await res.json());
       cachedDb = json;
       return json;
     })();
@@ -1598,7 +1629,7 @@
 
     _ensureWorker() {
       if (this.worker) return this.worker;
-      const workerUrl = new URL('ocr-worker.js?v=20261115n', ENGINE_BASE_URL).href;
+      const workerUrl = new URL('ocr-worker.js?v=20261115p', ENGINE_BASE_URL).href;
       const worker = new Worker(workerUrl, { type: 'module' });
       this.worker = worker;
 

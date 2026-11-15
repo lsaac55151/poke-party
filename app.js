@@ -1535,6 +1535,15 @@ function applyImportedState(st) {
   applyUiTranslations();
   renderSheet();
   renderOcrStatusUi();
+
+  const hasSavedScreens = ocrState.abilityCards.length > 0 || ocrState.statusCards.length > 0;
+  const hasUnresolvedSet = (ocrState.resolvedSets || []).some((s) => !s.speciesId);
+  if (hasSavedScreens && hasUnresolvedSet && window.ChampionsOcr) {
+    window.ChampionsOcr.loadDb().then((db) => {
+      ocrDbRef = db;
+      applyOcrMergeAndRefresh(db, '', { skipToast: true });
+    }).catch(() => {});
+  }
   return true;
 }
 
