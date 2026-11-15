@@ -1409,7 +1409,7 @@
       }
 
       this.initPromise = new Promise((resolve, reject) => {
-        const workerUrl = new URL('ocr-worker.js', ENGINE_BASE_URL).href;
+        const workerUrl = new URL('ocr-worker.js?v=20261115b', ENGINE_BASE_URL).href;
         const worker = new Worker(workerUrl, { type: 'module' });
         this.worker = worker;
 
