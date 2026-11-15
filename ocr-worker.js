@@ -109,7 +109,7 @@ function decodeCtc(logits, seqLen, numClasses, vocab, allowedIndices) {
 
 const MODEL_SPECS = {
   ko: { modelPath: 'models/rec.onnx', dictPath: 'models/dict.txt' },
-  ja: { modelPath: 'models/rec-ja.onnx?v=20261115p', dictPath: 'models/dict-ja.txt?v=20261115p' },
+  ja: { modelPath: 'models/rec-ja.onnx?v=20261115q', dictPath: 'models/dict-ja.txt?v=20261115q' },
 };
 const sessions = new Map();
 let ortConfigured = false;

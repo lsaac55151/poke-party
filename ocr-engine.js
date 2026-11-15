@@ -1573,7 +1573,7 @@
 
     dbPromise = (async () => {
       if (onProgress) onProgress({ stageKey: 'loading_champions_db', stage: '챔피언스 데이터 불러오는 중...', ratio: 0.08 });
-      const url = new URL('data/champions-db.json?v=20261115p', ENGINE_BASE_URL).href;
+      const url = new URL('data/champions-db.json?v=20261115q', ENGINE_BASE_URL).href;
       const res = await fetch(url);
       if (!res.ok) throw new Error(ocrText('dbLoadErr', { status: res.status }));
       const json = hydrateDbJapaneseNames(await res.json());
@@ -1629,7 +1629,7 @@
 
     _ensureWorker() {
       if (this.worker) return this.worker;
-      const workerUrl = new URL('ocr-worker.js?v=20261115p', ENGINE_BASE_URL).href;
+      const workerUrl = new URL('ocr-worker.js?v=20261115q', ENGINE_BASE_URL).href;
       const worker = new Worker(workerUrl, { type: 'module' });
       this.worker = worker;
 
