@@ -1364,7 +1364,7 @@
     assertHttpContext();
 
     dbPromise = (async () => {
-      if (onProgress) onProgress({ stage: '챔피언스 데이터베이스 로딩 중...', ratio: 0.08 });
+      if (onProgress) onProgress({ stage: '챔피언스 데이터 불러오는 중...', ratio: 0.08 });
       const url = new URL('data/champions-db.json', ENGINE_BASE_URL).href;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`챔피언스 DB 로드 실패: HTTP ${res.status}`);

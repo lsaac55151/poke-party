@@ -74,7 +74,7 @@ self.onmessage = async (event) => {
       const modelUrl = new URL('models/rec.onnx', msg.baseUrl).href;
       const dictUrl = new URL('models/dict.txt', msg.baseUrl).href;
 
-      self.postMessage({ type: 'progress', stage: 'OCR 모델 및 사전 다운로드 중...', ratio: 0.15 });
+      self.postMessage({ type: 'progress', stage: 'OCR 인식 데이터 불러오는 중...', ratio: 0.15 });
 
       const [modelRes, dictRes] = await Promise.all([fetch(modelUrl), fetch(dictUrl)]);
       if (!modelRes.ok) throw new Error(`모델 로드 실패: ${modelRes.status}`);
@@ -82,7 +82,7 @@ self.onmessage = async (event) => {
 
       const [modelBuf, dictTxt] = await Promise.all([modelRes.arrayBuffer(), dictRes.text()]);
 
-      self.postMessage({ type: 'progress', stage: 'ONNX Runtime WASM 초기화 중...', ratio: 0.75 });
+      self.postMessage({ type: 'progress', stage: '브라우저 OCR 엔진 준비 중...', ratio: 0.75 });
 
       vocab = buildCtcVocab(dictTxt);
       session = await ort.InferenceSession.create(new Uint8Array(modelBuf), {

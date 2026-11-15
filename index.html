@@ -7,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800;900&family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css?v=20261115b" />
+  <link rel="stylesheet" href="./styles.css?v=20261115d" />
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="./pokemon-data.js?v=20261115b"></script>
+  <script src="./pokemon-data.js?v=20261115d"></script>
 </head>
 <body class="theme-ingame">
 
@@ -20,6 +20,7 @@
         <span class="brand-dot"></span>
         <span class="app-title">POKÉMON CHAMPIONS PARTY</span>
       </div>
+      <button type="button" class="btn mobile-subbar-toggle" id="mobileSubbarToggle" onclick="toggleMobileSubbar()">시트 설정 ▾</button>
       <div class="sep"></div>
       <button type="button" class="btn" onclick="openOcrModal()">스샷 입력 (Ctrl+V)</button>
       <button type="button" class="ocr-pill" id="ocrStatusPill" onclick="openOcrModal()" hidden title="저장된 능력·스테이터스 스샷 정보 및 변환 내역 보기"></button>
@@ -278,8 +279,8 @@
   <datalist id="movesDatalist"></datalist>
   <div class="toast" id="toastBox"></div>
 
-  <script src="./core.js?v=20261115b"></script>
-  <script src="./ocr-engine.js?v=20261115b"></script>
-  <script src="./app.js?v=20261115b"></script>
+  <script src="./core.js?v=20261115d"></script>
+  <script src="./ocr-engine.js?v=20261115d"></script>
+  <script src="./app.js?v=20261115d"></script>
 </body>
 </html>

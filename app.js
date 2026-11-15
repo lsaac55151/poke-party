@@ -427,11 +427,29 @@ function updateGlobalSettings() {
   renderSheet();
 }
 
-function fitStageToViewport() {
+function fitStageToViewport(force = false) {
+  if (isSavingImage && !force) return;
   const vp = document.getElementById('stageViewport');
   const sc = document.getElementById('stageScaler');
   const sheet = document.getElementById('sheet16x9');
   if (!vp || !sc || !sheet) return;
+
+  const isPresentation = document.body.classList.contains('presentation-mode');
+  const isMobileEdit = window.innerWidth <= 768 && !isPresentation;
+
+  document.body.classList.toggle('mobile-edit-flow', isMobileEdit);
+  sheet.classList.toggle('mobile-card-flow', isMobileEdit);
+
+  if (isMobileEdit) {
+    sheet.classList.remove('is-wide-edit');
+    sc.style.width = '';
+    sc.style.height = '';
+    sc.style.transform = '';
+    sheet.style.width = '';
+    sheet.style.height = '';
+    autoFitSheetTexts();
+    return;
+  }
 
   const vpW = vp.clientWidth;
   const vpH = vp.clientHeight;
@@ -463,6 +481,13 @@ function fitStageToViewport() {
 function togglePresentationMode() {
   document.body.classList.toggle('presentation-mode');
   setTimeout(fitStageToViewport, 20);
+}
+
+function toggleMobileSubbar() {
+  const isOpen = document.body.classList.toggle('mobile-subbar-open');
+  const btn = document.getElementById('mobileSubbarToggle');
+  if (btn) btn.textContent = isOpen ? '설정 닫기 ▴' : '시트 설정 ▾';
+  setTimeout(fitStageToViewport, 30);
 }
 
 // Bakes Pokemon sprite drop-shadow and aspect-ratio containment onto an offscreen canvas
@@ -549,11 +574,15 @@ async function download16x9Image() {
     scaler.style.top = prevTop;
     scaler.style.zIndex = prevZ;
     scaler.style.transform = prevTransform;
-    fitStageToViewport();
+    fitStageToViewport(true);
   };
 
   try {
     restoreImgs = await inlineImagesForCapture(sheet);
+
+    document.body.classList.remove('mobile-edit-flow');
+    sheet.classList.remove('mobile-card-flow');
+    sheet.classList.remove('is-wide-edit');
 
     scaler.style.position = 'fixed';
     scaler.style.left = '0px';
@@ -562,7 +591,6 @@ async function download16x9Image() {
     scaler.style.transform = 'none';
     scaler.style.width = '1920px';
     scaler.style.height = '1080px';
-    sheet.classList.remove('is-wide-edit');
     sheet.style.width = '1920px';
     sheet.style.height = '1080px';
 
