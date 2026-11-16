@@ -149,7 +149,12 @@ function onSpriteLoad(imgEl) {
   });
 }
 
+const HOME_PLACEHOLDER_SPRITES = new Set(['floette-eternal']);
+
 function getSpriteUrl(spriteId) {
+  if (HOME_PLACEHOLDER_SPRITES.has(spriteId)) {
+    return `https://wsrv.nl/?url=https://play.pokemonshowdown.com/sprites/dex/${spriteId}.png`;
+  }
   return `https://wsrv.nl/?url=https://play.pokemonshowdown.com/sprites/home-centered/${spriteId}.png`;
 }
 
