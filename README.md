@@ -84,3 +84,4 @@
 - **[wsrv.nl](https://wsrv.nl/)**: PNG 이미지 내보내기 시 CORS 대응을 위한 스프라이트 이미지 프록시 (`BSD 3-Clause License`)
 - **[html2canvas](https://html2canvas.hertzen.com/)**: 빈 시트·예외 상황용 폴백 PNG 렌더링 (기본 저장은 HTML5 Canvas 2D 직접 렌더링, `MIT License`)
 - **[Google Fonts](https://fonts.google.com/)**: `JetBrains Mono`, `Noto Sans KR`, `Noto Sans JP`
+- 재배포된 서드파티 오픈소스(ONNX Runtime Web · PaddleOCR · Pokémon Showdown) 라이선스 전문은 [`THIRD-PARTY-LICENSES.txt`](./THIRD-PARTY-LICENSES.txt)에서 확인할 수 있습니다.
