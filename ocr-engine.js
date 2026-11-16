@@ -408,14 +408,15 @@
           const calc = calcChampionsStat(key, baseStats[key], sp, mult);
           let s = 0;
           if (typeof obsRaw === 'number') {
-            if (calc === obsRaw) s += 15;
-            else if (Math.abs(calc - obsRaw) <= 2) s -= 4;
-            else s -= 25;
+            if (calc === obsRaw) s += 22;
+            else if (Math.abs(calc - obsRaw) <= 1) s -= 6;
+            else if (Math.abs(calc - obsRaw) <= 2) s -= 14;
+            else s -= 35;
           }
           if (typeof obsSp === 'number') {
-            if (sp === obsSp) s += 12;
-            else if (Math.abs(sp - obsSp) <= 1) s -= 3;
-            else s -= 15;
+            if (sp === obsSp) s += 10;
+            else if (Math.abs(sp - obsSp) <= 1) s += 2;
+            else s -= 6;
           }
           if (s > statBestScore) {
             statBestScore = s;
@@ -638,13 +639,13 @@
       const sp = cand.entry;
       let total = cand.nameSim * 100;
 
-      if (sp.champions) total += 8;
+      if (sp.champions) total += 22;
 
       if (ctx.gender === 'F') {
-        if (sp.gender === 'F') total += 25;
+        if (sp.gender === 'F') total += 10;
         else if (sp.gender === 'M' || sp.gender === 'N') total -= 35;
       } else if (ctx.gender === 'M') {
-        if (sp.gender === 'M') total += 25;
+        if (sp.gender === 'M') total += 10;
         else if (sp.gender === 'F' || sp.gender === 'N') total -= 35;
       }
 
@@ -665,7 +666,7 @@
 
       total += statFitScore(sp, ctx.rawStats, ctx.spStats, ctx.arrows);
 
-      if (!sp.forme) total += 0.5;
+      if (!sp.forme) total += 6;
 
       if (total > bestTotal) {
         bestTotal = total;
@@ -1207,16 +1208,16 @@
         pushCrop('move2', 0.655, 0.510, 0.980, 0.730, false, true);
         pushCrop('move3', 0.655, 0.750, 0.980, 0.970, false, true);
       } else {
-        pushCrop('raw_hp', 0.270, 0.265, 0.365, 0.485, true, false);
-        pushCrop('raw_atk', 0.270, 0.515, 0.365, 0.725, true, false);
-        pushCrop('raw_def', 0.270, 0.750, 0.365, 0.970, true, false);
-        pushCrop('raw_spa', 0.762, 0.265, 0.855, 0.485, true, false);
-        pushCrop('raw_spd', 0.762, 0.515, 0.855, 0.725, true, false);
-        pushCrop('raw_spe', 0.762, 0.750, 0.855, 0.970, true, false);
+        pushCrop('raw_hp', 0.268, 0.265, 0.356, 0.485, true, false);
+        pushCrop('raw_atk', 0.268, 0.515, 0.356, 0.725, true, false);
+        pushCrop('raw_def', 0.268, 0.750, 0.356, 0.970, true, false);
+        pushCrop('raw_spa', 0.758, 0.265, 0.842, 0.485, true, false);
+        pushCrop('raw_spd', 0.758, 0.515, 0.842, 0.725, true, false);
+        pushCrop('raw_spe', 0.758, 0.750, 0.842, 0.970, true, false);
 
-        pushCrop('sp_hp', 0.435, 0.265, 0.502, 0.485, true, false);
-        pushCrop('sp_atk', 0.435, 0.515, 0.502, 0.725, true, false);
-        pushCrop('sp_def', 0.435, 0.750, 0.502, 0.970, true, false);
+        pushCrop('sp_hp', 0.415, 0.265, 0.495, 0.485, true, false);
+        pushCrop('sp_atk', 0.415, 0.515, 0.495, 0.725, true, false);
+        pushCrop('sp_def', 0.415, 0.750, 0.495, 0.970, true, false);
         pushCrop('sp_spa', 0.898, 0.265, 0.980, 0.485, true, false);
         pushCrop('sp_spd', 0.898, 0.515, 0.980, 0.725, true, false);
         pushCrop('sp_spe', 0.898, 0.750, 0.980, 0.970, true, false);
@@ -1304,7 +1305,7 @@
       const b = bySlotB.get(a.slot);
       if (!b) continue;
       overlapping++;
-      if (a.speciesOcr && b.speciesOcr && koreanSimilarity(a.speciesOcr, b.speciesOcr) >= 0.55) {
+      if (a.speciesOcr && b.speciesOcr && Math.max(koreanSimilarity(a.speciesOcr, b.speciesOcr), japaneseSimilarity(a.speciesOcr, b.speciesOcr)) >= 0.55) {
         return true;
       }
       if (db && a.speciesOcr && b.speciesOcr) {

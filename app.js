@@ -1924,7 +1924,7 @@ function applyOcrMergeAndRefresh(db, customToast, opts = {}) {
     if (pasteEl) pasteEl.value = showdown;
 
     const megaAuto = document.getElementById('megaModeSelect').value === 'auto';
-    const parsed = parseShowdownPaste(showdown, megaAuto);
+    const parsed = parseShowdownPaste(showdown, megaAuto, { skipEvConversion: true });
 
     if (parsed.party.length > 0) {
       lastErrorKey = '';

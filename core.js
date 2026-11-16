@@ -428,7 +428,7 @@ function calcChampionsStats(baseStats, sp, natureName, speciesId) {
   return res;
 }
 
-function parseShowdownPaste(rawText, defaultShowMega) {
+function parseShowdownPaste(rawText, defaultShowMega, opts = {}) {
   const blocks = String(rawText || '').trim().split(/\r?\n\s*\r?\n/).map(b => b.trim()).filter(Boolean);
   const party = [];
   let convertedFrom252 = false;
@@ -496,7 +496,7 @@ function parseShowdownPaste(rawText, defaultShowMega) {
     }
 
     const total = STAT_KEYS.reduce((a, k) => a + sp[k], 0);
-    if (Math.max(...Object.values(sp)) > 32 || total > 66) {
+    if (!opts.skipEvConversion && (Math.max(...Object.values(sp)) > 32 || total > 66)) {
       convertedFrom252 = true;
       for (const k of STAT_KEYS) {
         if (sp[k] > 0) sp[k] = Math.min(32, Math.floor((sp[k] + 4) / 8));
