@@ -155,19 +155,22 @@ function getSpriteUrl(spriteId) {
 
 function onSpriteError(imgEl, spriteId, baseSpriteId, num) {
   const step = Number(imgEl.dataset.step || 0);
-  if (step === 0) {
-    imgEl.dataset.step = '1';
-    imgEl.src = `https://wsrv.nl/?url=https://play.pokemonshowdown.com/sprites/bw/${spriteId}.png`;
-  } else if (step === 1 && baseSpriteId && baseSpriteId !== spriteId) {
-    imgEl.dataset.step = '2';
-    imgEl.src = `https://wsrv.nl/?url=https://play.pokemonshowdown.com/sprites/home-centered/${baseSpriteId}.png`;
-  } else if (step <= 2 && num) {
-    imgEl.dataset.step = '3';
-    imgEl.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${num}.png`;
-  } else if (step === 3) {
-    imgEl.dataset.step = '4';
-    imgEl.removeAttribute('crossorigin');
-    imgEl.src = `https://play.pokemonshowdown.com/sprites/home-centered/${spriteId}.png`;
+  const candidates = [
+    { url: `https://wsrv.nl/?url=https://play.pokemonshowdown.com/sprites/ani/${spriteId}.gif&output=png` },
+    { url: `https://wsrv.nl/?url=https://play.pokemonshowdown.com/sprites/gen5/${spriteId}.png` },
+  ];
+  if (baseSpriteId && baseSpriteId !== spriteId) {
+    candidates.push({ url: `https://wsrv.nl/?url=https://play.pokemonshowdown.com/sprites/home-centered/${baseSpriteId}.png` });
+  }
+  if (num) {
+    candidates.push({ url: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${num}.png` });
+  }
+  candidates.push({ url: `https://play.pokemonshowdown.com/sprites/home-centered/${spriteId}.png`, noCors: true });
+  if (step < candidates.length) {
+    const next = candidates[step];
+    imgEl.dataset.step = String(step + 1);
+    if (next.noCors) imgEl.removeAttribute('crossorigin');
+    imgEl.src = next.url;
   }
 }
 
