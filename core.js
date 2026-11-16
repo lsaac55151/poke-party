@@ -353,6 +353,46 @@ function resolveMegaSpecies(spEntry, itemEntry) {
   return null;
 }
 
+/**
+ * Resolve displayed base/mega species and ability for a party slot.
+ * Handles both `Gengar @ Gengarite` and directly pasted `Gengar-Mega @ Gengarite`.
+ */
+function resolveSlotDisplay(slot) {
+  const spEntry = (slot && slot.speciesId && D.dex[slot.speciesId]) || D.dex.pikachu;
+  const itemEntry = (slot && slot.itemId) ? (D.items[slot.itemId] || null) : null;
+  const showMega = !slot || slot.showMega !== false;
+  const isMegaSpecies = Boolean(spEntry && spEntry.forme && /^Mega/i.test(spEntry.forme));
+  const parentBase = (isMegaSpecies && spEntry.base && D.dex[spEntry.base]) ? D.dex[spEntry.base] : null;
+
+  let baseSp = spEntry;
+  let megaSp = resolveMegaSpecies(spEntry, itemEntry);
+
+  if (isMegaSpecies && !megaSp && parentBase && itemEntry) {
+    const matchedMega = resolveMegaSpecies(parentBase, itemEntry);
+    if (matchedMega && matchedMega.id === spEntry.id) {
+      baseSp = parentBase;
+      megaSp = spEntry;
+    }
+  }
+
+  const isDisplayingMega = megaSp ? showMega : isMegaSpecies;
+  const activeSp = (megaSp && showMega) ? megaSp : (megaSp ? baseSp : spEntry);
+
+  const abilId = slot ? slot.abilityId : '';
+  const baseAbil = D.abilities[abilId] || { name: abilId || '-', ko: abilId || '-', ja: abilId || '-' };
+  let shownAbil = baseAbil;
+
+  if (isDisplayingMega && activeSp.ab && activeSp.ab.length) {
+    const matchesMegaPool = activeSp.ab.some(a => toEnKey(a) === abilId);
+    if (!matchesMegaPool) {
+      const megaAbilRaw = activeSp.ab[0];
+      shownAbil = D.abilities[toEnKey(megaAbilRaw)] || { name: megaAbilRaw, ko: megaAbilRaw, ja: megaAbilRaw };
+    }
+  }
+
+  return { baseSp, itemEntry, megaSp, activeSp, baseAbil, shownAbil };
+}
+
 function findDedicatedMegaStones(spEntry) {
   if (!spEntry) return [];
   const targetId = spEntry.base || spEntry.id;

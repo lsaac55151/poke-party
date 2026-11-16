@@ -234,15 +234,7 @@ function renderSheet() {
   };
 
   currentParty.forEach((slot, idx) => {
-    const baseSp = D.dex[slot.speciesId] || D.dex.pikachu;
-    const itemEntry = D.items[slot.itemId];
-    const megaSp = resolveMegaSpecies(baseSp, itemEntry);
-    const activeSp = (megaSp && slot.showMega) ? megaSp : baseSp;
-
-    const baseAbil = D.abilities[slot.abilityId] || { name: slot.abilityId || '-', ko: slot.abilityId || '-', ja: slot.abilityId || '-' };
-    const megaAbilRaw = activeSp.ab ? activeSp.ab[0] : '';
-    const megaAbil = megaAbilRaw ? (D.abilities[toEnKey(megaAbilRaw)] || { name: megaAbilRaw, ko: megaAbilRaw, ja: megaAbilRaw }) : baseAbil;
-    const shownAbil = (megaSp && slot.showMega) ? megaAbil : baseAbil;
+    const { baseSp, itemEntry, megaSp, activeSp, shownAbil } = resolveSlotDisplay(slot);
 
     const nat = NATURES[slot.nature] || NATURES.Serious;
     const realStats = calcChampionsStats(activeSp.bs, slot.sp, slot.nature, activeSp.id);
@@ -1370,9 +1362,7 @@ function formatEditorStatLabel(k) {
 function renderSpSliders() {
   const slot = currentParty[editingSlotIdx];
   if (!slot) return;
-  const baseSp = D.dex[slot.speciesId] || D.dex.pikachu;
-  const megaSp = resolveMegaSpecies(baseSp, D.items[slot.itemId]);
-  const activeSp = (megaSp && slot.showMega) ? megaSp : baseSp;
+  const { activeSp } = resolveSlotDisplay(slot);
   const realStats = calcChampionsStats(activeSp.bs, slot.sp, slot.nature, activeSp.id);
   const total = STAT_KEYS.reduce((a, k) => a + Number(slot.sp[k] || 0), 0);
 
